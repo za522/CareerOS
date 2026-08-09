@@ -74,6 +74,7 @@ describe("PostgresCloudDataProvider", () => {
     ]);
     const sql = mocks.query.mock.calls.map((call) => call[0]);
     expect(sql.filter((query) => query.includes("pg_advisory_lock"))).toHaveLength(1);
+    expect(sql.indexOf("SET search_path TO public, pg_temp")).toBeLessThan(sql.indexOf("CREATE SCHEMA IF NOT EXISTS careeros"));
     expect(sql.indexOf("SELECT 'first'")).toBeLessThan(sql.indexOf("SELECT 'second'"));
     expect(sql.filter((query) => query.includes("pg_advisory_unlock"))).toHaveLength(1);
   });

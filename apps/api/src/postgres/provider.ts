@@ -118,6 +118,9 @@ export class PostgresCloudDataProvider implements CloudDataProvider {
     const client = await this.#pool.connect();
     try {
       await client.query("SELECT pg_advisory_lock(hashtext('careeros-cloud-migrations'))");
+      // A database login named `careeros` makes PostgreSQL's default "$user" schema
+      // shadow public as soon as this schema exists. All CareerOS tables belong in public.
+      await client.query("SET search_path TO public, pg_temp");
       await client.query("CREATE SCHEMA IF NOT EXISTS careeros");
       await client.query("CREATE TABLE IF NOT EXISTS careeros.schema_migrations (version text PRIMARY KEY, checksum text NOT NULL DEFAULT '', applied_at timestamptz NOT NULL DEFAULT now())");
       await client.query("ALTER TABLE careeros.schema_migrations ADD COLUMN IF NOT EXISTS checksum text NOT NULL DEFAULT ''");
