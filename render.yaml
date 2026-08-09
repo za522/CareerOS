@@ -1,0 +1,64 @@
+databases:
+  - name: careeros-postgres
+    plan: basic-256mb
+    databaseName: careeros
+    user: careeros
+
+services:
+  - type: web
+    name: careeros-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CAREEROS_HOSTED
+        value: "1"
+      - key: CAREEROS_DATA_PROVIDER
+        value: postgres
+      - key: DATABASE_URL
+        fromDatabase:
+          name: careeros-postgres
+          property: connectionString
+      - key: CAREEROS_DATA_DIR
+        value: /var/lib/careeros
+      - key: CAREEROS_APP_URL
+        sync: false
+      - key: CAREEROS_ALLOWED_ORIGINS
+        sync: false
+      - key: CAREEROS_OWNER_EMAIL
+        sync: false
+      - key: CAREEROS_SESSION_ENCRYPTION_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CAREEROS_STORAGE_PROVIDER
+        value: supabase
+      - key: CAREEROS_STORAGE_BUCKET
+        value: career-files
+      - key: CAREEROS_BACKUP_STORAGE_PROVIDER
+        value: filesystem
+      - key: CAREEROS_BACKUP_OBJECT_STORAGE_DIR
+        value: /var/lib/careeros/backups
+      - key: CAREEROS_BACKUP_ENCRYPTION_KEY
+        sync: false
+      - key: CAREEROS_REALTIME_ENABLED
+        value: "1"
+      - key: CAREEROS_REALTIME_TIMEOUT_MS
+        value: "8000"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CAREEROS_INTEGRATION_ENCRYPTION_KEY
+        sync: false
+      - key: CAREEROS_INTEGRATION_ENCRYPTION_KEY_PREVIOUS
+        sync: false
+    disk:
+      name: careeros-data
+      mountPath: /var/lib/careeros
+      sizeGB: 2

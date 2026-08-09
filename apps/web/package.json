@@ -1,0 +1,27 @@
+{
+  "name": "@careeros/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @careeros/contracts build && vite --host 127.0.0.1 --port 5173",
+    "build": "pnpm --filter @careeros/contracts build && vite build",
+    "test": "vitest run src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@careeros/contracts": "workspace:*",
+    "@supabase/supabase-js": "^2.112.2",
+    "@vitejs/plugin-react": "^4.7.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "typescript": "^5.7.2",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
+  }
+}

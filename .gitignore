@@ -1,0 +1,16 @@
+node_modules
+dist
+data
+data-object-storage
+backups
+outputs
+tmp
+work
+test-artifacts
+test-results
+playwright-report
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example

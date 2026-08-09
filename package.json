@@ -1,0 +1,25 @@
+{
+  "name": "careeros",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "pnpm --filter @careeros/contracts build && pnpm --parallel --filter @careeros/api --filter @careeros/web dev",
+    "dev:ai": "./scripts/start-with-ai.zsh",
+    "build": "pnpm --filter @careeros/contracts build && pnpm --filter @careeros/ai build && pnpm --filter @careeros/api build && pnpm --filter @careeros/web build",
+    "test": "pnpm --filter @careeros/contracts test && pnpm --filter @careeros/ai test && pnpm --filter @careeros/api test && pnpm --filter @careeros/web test",
+    "pretest:e2e": "pnpm --filter @careeros/contracts build",
+    "test:e2e": "playwright test",
+    "pretest:e2e:hosted": "pnpm --filter @careeros/contracts build && pnpm --filter @careeros/ai build",
+    "test:e2e:hosted": "playwright test --config playwright.hosted.config.ts",
+    "typecheck": "pnpm --filter @careeros/contracts typecheck && pnpm --filter @careeros/ai typecheck && pnpm --filter @careeros/api typecheck && pnpm --filter @careeros/web typecheck"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite-socket": "^0.2.7",
+    "@playwright/test": "^1.62.1",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
+    "postgres": "^3.4.9"
+  }
+}
