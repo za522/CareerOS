@@ -903,6 +903,14 @@ function requestedLiteralValuesByTarget(instructions: string, targets: CvResolve
   return values;
 }
 
+function looksLikeQualitativeCvDirection(value: string) {
+  const normalised = value.trim().toLowerCase();
+  return /^(?:make|rewrite|tailor|adapt|improve|optimise|optimize|align|emphasise|emphasize|focus|shorten|condense|expand|highlight|reflect|match|sync|synchronise|synchronize|rework|revise)\b/.test(normalised)
+    || /^(?:more|less|better|stronger|clearer|shorter|longer)\b/.test(normalised)
+    || /\b(?:more|less)\s+(?:apt|appropriate|relevant|aligned|suited|suitable|concise|technical|commercial)\b/.test(normalised)
+    || /\b(?:fit|match|align(?:ed)?)\s+(?:with|to)\s+(?:the\s+)?(?:job|role|description|requirements?)\b/.test(normalised);
+}
+
 function requestedDedicatedLiteral(instructions: string, field: CvTargetField) {
   if (field === "contact.website") return instructions.match(/https?:\/\/[^\s<>"']+/i)?.[0]?.replace(/[),.;!?]+$/, "") ?? null;
   if (field === "contact.email") return instructions.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? null;
@@ -923,12 +931,13 @@ function requestedDedicatedLiteral(instructions: string, field: CvTargetField) {
   const reverse = clause.match(new RegExp(`(?:please\\s+)?(?:use\\s+)?([\\s\\S]+?)\\s+(?:as|for)\\s+(?:my\\s+|the\\s+)?${label}\\s*$`, "i"))?.[1]?.trim();
   const value = explicit ?? reverse;
   if (!value) return null;
-  return value
+  const cleaned = value
     .replace(/\s*(?:,?\s*and\s+)?(?:(?:do\s+not|don't)\s+(?:change|alter|rewrite)|(?:leave|keep)\s+(?:every|everything|all|the)|nothing\s+else)[\s\S]*$/i, "")
     .replace(/^[:\s]+/, "")
     .replace(/[\s,;]+$/, "")
     .replace(/\s+only[.!]?$/i, "")
-    .trim() || null;
+    .trim();
+  return cleaned && !looksLikeQualitativeCvDirection(cleaned) ? cleaned : null;
 }
 
 function resolveCvInstructionPlan(instructions: string, content: CvDocumentContent): CvInstructionPlan {
@@ -1585,7 +1594,7 @@ export function createOpenAiProvider(config: OpenAiProviderConfig): AiProvider {
             reasoning: { effort: "medium" },
             max_output_tokens: 2_500,
             input: [
-              { role: "developer", content: `Interpret one human CV-edit request into a precise scope plan. The request may contain dictation errors, punctuation errors, informal names, or implied CV concepts. Map introduction/profile summary to targetField intro; contact details to the matching contact field; and location/date/title/subtitle/content to targetSectionField. For all/every requests, enumerate every eligible entry and subtract every explicit exception. Use only IDs from availableCvEntries, never invent IDs, and never perform edits. If wording such as "Singapore please force" closely matches an available entry such as "Singapore Police Force", resolve it to that entry. Return broad only when the user genuinely asks to tailor or improve the whole CV without naming a narrower field or subset.${repairing ? " Repair the prior malformed scope response." : ""}` },
+              { role: "developer", content: `Interpret one human CV-edit request into a precise scope plan. The request may contain dictation errors, punctuation errors, informal names, or implied CV concepts. Map introduction/profile summary to targetField intro; contact details to the matching contact field; and location/date/title/subtitle/content to targetSectionField. For all/every requests, enumerate every eligible entry and subtract every explicit exception. requestedValue is only for replacement content the user supplied verbatim. Set requestedValue to null for qualitative directions such as make, rewrite, tailor, adapt, improve, align, emphasise, shorten, or make more relevant to the job. Use only IDs from availableCvEntries, never invent IDs, and never perform edits. If wording such as "Singapore please force" closely matches an available entry such as "Singapore Police Force", resolve it to that entry. Return broad only when the user genuinely asks to tailor or improve the whole CV without naming a narrower field or subset.${repairing ? " Repair the prior malformed scope response." : ""}` },
               { role: "user", content: JSON.stringify({
                 userInstructions: input.instructions,
                 availableCvEntries: input.baseContent.sections.map((section) => ({ id: section.id, groupTitle: section.groupTitle ?? inferredGroupTitle(section), evidenceType: section.evidenceType, title: section.title, subtitle: section.subtitle ?? "", date: section.date ?? "", location: section.location ?? "" })),
@@ -1682,7 +1691,7 @@ export function createOpenAiProvider(config: OpenAiProviderConfig): AiProvider {
             reasoning: { effort: "medium" },
             max_output_tokens: 8_000,
             input: [
-              { role: "developer", content: `${cvTailoringInstructions}\nThe application has already resolved the user's edit scope. When trustedResolvedTargets is non-empty, it is authoritative: return exactly one conservative evidence-backed change for EACH target, copy its target fields exactly, and return no other changes. protectedSectionIds must never be changed.${repairing ? " This is a repair pass for targets omitted from the first response." : ""}` },
+              { role: "developer", content: `${cvTailoringInstructions}\nThe application has already resolved the user's edit scope. When trustedResolvedTargets is non-empty, it is authoritative: return exactly one conservative evidence-backed change for EACH target, copy its target fields exactly, and return no other changes. protectedSectionIds must never be changed. For contextual requests such as making an introduction more apt for the job, use untrustedJob to choose emphasis and vocabulary, but use only untrustedBaseCv and factualProfileEvidence for claims about the candidate. Never turn an employer requirement into a claim that the candidate possesses it.${repairing ? " This is a repair pass for targets omitted from the first response." : ""}` },
               { role: "user", content: JSON.stringify({
                 untrustedJob: input.job,
                 untrustedBaseCv: input.baseContent,
@@ -1785,12 +1794,13 @@ export function createOpenAiProvider(config: OpenAiProviderConfig): AiProvider {
             if (unrelatedEvidenceIds.length) throw new Error(`AI cited evidence that does not belong to ${target.title}. No changes were applied.`);
           }
           const originalContent = targetField ? fieldValue(input.baseContent, targetField) : target && targetSectionField ? sectionFieldValue(target, targetSectionField) : target?.content ?? "";
+          if ((targetField || targetSectionField) && operation !== "remove" && operation !== "reorder") {
+            operation = originalContent ? "rewrite" : "add";
+          }
           if (operation === "rewrite" && sameCvValue(originalContent, candidate.proposedContent)) continue;
           const exactRequestedValue = requestedValues.get(targetKey) ?? requestedValue;
           if (exactRequestedValue && (targetField || targetSectionField)) {
-            const requiredOperation = originalContent ? "rewrite" : "add";
-            const invalidOperation = operation === "remove" || operation === "reorder" || (Boolean(targetField) && operation !== requiredOperation);
-            if (!sameCvValue(exactRequestedValue, candidate.proposedContent) || invalidOperation) {
+            if (!sameCvValue(exactRequestedValue, candidate.proposedContent) || operation === "remove" || operation === "reorder") {
               throw new Error("AI did not preserve the exact requested value and operation. No changes were applied.");
             }
           }

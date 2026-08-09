@@ -340,6 +340,45 @@ describe("deterministic dedicated-field updates", () => {
     });
   }
 
+  it("treats a job-aware introduction request as a contextual rewrite rather than literal replacement text", async () => {
+    const input = providerInput("change the intro to make it more apt for the job description");
+    input.job = jobDraftSchema.parse({
+      title: "Software Development Engineer",
+      companyName: "Example Technology",
+      shortSummary: "Build reliable customer-facing software.",
+      requiredRequirements: ["Product development", "Software engineering"],
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(modelResponse({
+      intent: intent([], { targetField: "intro", requestedValue: null }),
+      changes: [{
+        changeKey: "intro-role-fit",
+        operation: "rewrite",
+        targetField: "intro",
+        targetSectionField: null,
+        targetSectionId: null,
+        proposedPosition: null,
+        proposedEvidenceType: "other",
+        proposedTitle: "Introduction",
+        proposedContent: "Designed a small website.",
+        rationale: "Prioritises product evidence relevant to the role.",
+        evidenceIds: [evidenceB],
+        confidence: 0.95,
+      }],
+      matches: [], gaps: [], summary: "A focused introduction is ready for review.",
+    }));
+    const provider = createOpenAiProvider({ apiKey: "test", model: "test" });
+    const result = await provider.adaptCv!(input);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.changes).toHaveLength(1);
+    expect(result.changes[0]).toMatchObject({
+      targetField: "intro",
+      proposedContent: "Designed a small website.",
+      operation: "add",
+    });
+    expect(result.changes[0].proposedContent).not.toBe("make it more apt for the job description");
+  });
+
   it.each([
     ["Change my introduction: Product engineer focused on reliable systems. Do not change anything else.", "intro", "Product engineer focused on reliable systems."],
     ["Set my headline to Product Engineer, and leave every other field unchanged.", "headline", "Product Engineer"],

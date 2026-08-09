@@ -296,7 +296,14 @@ describe("CV change application", () => {
       })),
       matches: [], gaps: [], summary: "Four London location changes with three protected exceptions.",
     };
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify(modelOutput) }] }] }), { status: 200, headers: { "content-type": "application/json" } }));
+    const scopeOutput = {
+      mode: "targeted", targetField: null, targetSectionField: "location",
+      targetSectionIds: ["imperial", "sagecare", "startup", "tutoring"],
+      excludedSectionIds: ["police", "uwc", "krislite"], requestedValue: "London",
+      interpretation: "Set every CV entry location to London except Singapore Police Force, UWCSEA, and Krislite.",
+    };
+    const responseFor = (value: unknown) => new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify(value) }] }] }), { status: 200, headers: { "content-type": "application/json" } });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(responseFor(scopeOutput)).mockResolvedValueOnce(responseFor(modelOutput));
     const sections: CvDocumentContent["sections"] = [
       { id: "imperial", evidenceType: "education", title: "Imperial College London", location: "", content: "MEng Design Engineering.", sourceEvidenceIds: [evidenceId] },
       { id: "uwc", evidenceType: "education", title: "United World College South East Asia", location: "Singapore", content: "International Baccalaureate.", sourceEvidenceIds: [evidenceId] },
@@ -313,8 +320,8 @@ describe("CV change application", () => {
       instructions: "Change location of everything to be London except for Singapore Police Force, UWCSEA IB stuff, and Krislite stuff.",
     });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const requestBody = JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined)?.body));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const requestBody = JSON.parse(String((fetchSpy.mock.calls[1]?.[1] as RequestInit | undefined)?.body));
     const modelPayload = JSON.parse(requestBody.input[1].content);
     expect(modelPayload.trustedResolvedTargets.map((target: { key: string }) => target.key)).toEqual([
       "imperial:location", "sagecare:location", "startup:location", "tutoring:location",
@@ -358,7 +365,9 @@ describe("CV change application", () => {
       ],
       matches: [], gaps: [], summary: "Two changes.",
     };
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify(modelOutput) }] }] }), { status: 200, headers: { "content-type": "application/json" } }));
+    const scopeOutput = { mode: "targeted", targetField: null, targetSectionField: "location", targetSectionIds: ["sagecare"], excludedSectionIds: ["police"], requestedValue: "London", interpretation: "Change every location except Singapore Police Force." };
+    const responseFor = (value: unknown) => new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify(value) }] }] }), { status: 200, headers: { "content-type": "application/json" } });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(responseFor(scopeOutput)).mockResolvedValueOnce(responseFor(modelOutput));
     const base: CvDocumentContent = { name: "Zain Ahmad", headline: "", sections: [
       { id: "sagecare", evidenceType: "experience", title: "SageCare", location: "", content: "Web Design Intern.", sourceEvidenceIds: [evidenceId] },
       { id: "police", evidenceType: "experience", title: "Singapore Police Force", location: "Singapore", content: "Operations Room Officer.", sourceEvidenceIds: [evidenceId] },
