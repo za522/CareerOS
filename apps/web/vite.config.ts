@@ -3,6 +3,15 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  server: process.env.CAREEROS_DEV_API_PROXY ? {
+    proxy: {
+      "/__careeros_hosted": {
+        target: process.env.CAREEROS_DEV_API_PROXY,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/__careeros_hosted/, ""),
+      },
+    },
+  } : undefined,
   build: {
     rollupOptions: {
       output: {

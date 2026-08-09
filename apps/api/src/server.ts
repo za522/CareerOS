@@ -3889,17 +3889,75 @@ function persistSalaryEstimate(jobPostingId: string, input: SalaryEstimateCreate
   return getJobDetail(jobPostingId)?.salaries.find((salary) => salary.id === id) ?? null;
 }
 
+async function persistHostedSalaryEstimate(
+  context: ReturnType<typeof trackerContext>,
+  jobPostingId: string,
+  input: SalaryEstimateCreateInput,
+  evidence: SalaryResearchEvidence[] = [],
+): Promise<SalaryEstimateRecord | null> {
+  if (runtimeDataProvider.name !== "postgres") return null;
+  const parsed = salaryEstimateCreateSchema.parse(input);
+  const id = randomUUID();
+  const timestamp = now();
+  return runtimeDataProvider.postgres.transaction(context, async (tx) => {
+    const job = await tx.query("SELECT 1 FROM job_postings WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL", [context.workspaceId, jobPostingId]);
+    if (job.rowCount !== 1) return null;
+    await tx.query(`INSERT INTO salary_estimates(
+      id,workspace_id,job_posting_id,estimate_type,min_amount,max_amount,base_min_amount,base_max_amount,
+      total_comp_min_amount,total_comp_max_amount,currency,payment_period,base_salary,bonus,equity,other_compensation,
+      country,region,seniority_assumptions,source_name,source_url,evidence_excerpt,source_date,confidence,
+      annualised_equivalent,normalised_currency,exchange_rate_date,research_notes,created_at,updated_at,revision
+    ) VALUES(
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$29,1
+    )`, [
+      id, context.workspaceId, jobPostingId, parsed.estimateType, parsed.minAmount ?? null, parsed.maxAmount ?? null,
+      parsed.baseMinAmount ?? null, parsed.baseMaxAmount ?? null, parsed.totalCompMinAmount ?? null, parsed.totalCompMaxAmount ?? null,
+      parsed.currency, parsed.paymentPeriod, parsed.baseSalary ?? null, parsed.bonus ?? null, parsed.equity, parsed.otherCompensation,
+      parsed.country, parsed.region, parsed.seniorityAssumptions, parsed.sourceName, parsed.sourceUrl, parsed.evidenceExcerpt,
+      parsed.sourceDate || null, parsed.confidence, parsed.annualisedEquivalent ?? null, parsed.normalisedCurrency,
+      parsed.exchangeRateDate || null, parsed.researchNotes, timestamp,
+    ]);
+    for (const item of evidence) {
+      await tx.query(`INSERT INTO salary_research_evidence(
+        id,workspace_id,salary_estimate_id,source_name,source_url,source_date,role_title,location,seniority,
+        compensation_scope,min_amount,max_amount,currency,payment_period,excerpt,confidence,created_at
+      ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, [
+        randomUUID(), context.workspaceId, id, item.sourceName, item.sourceUrl, item.sourceDate || null, item.roleTitle,
+        item.location, item.seniority, item.compensationScope, item.minAmount ?? null, item.maxAmount ?? null,
+        item.currency, item.paymentPeriod, item.excerpt, item.confidence, timestamp,
+      ]);
+    }
+    await tx.query("INSERT INTO audit_events(id,workspace_id,actor_user_id,action,entity_type,entity_id,summary,metadata_json,created_at) VALUES($1,$2,$3,'salary.created','SalaryEstimate',$4,'Saved a salary estimate','{}'::jsonb,$5)", [randomUUID(), context.workspaceId, context.userId, id, timestamp]);
+    return {
+      id, jobPostingId, ...parsed,
+      minAmount: parsed.minAmount ?? null, maxAmount: parsed.maxAmount ?? null,
+      baseMinAmount: parsed.baseMinAmount ?? null, baseMaxAmount: parsed.baseMaxAmount ?? null,
+      totalCompMinAmount: parsed.totalCompMinAmount ?? null, totalCompMaxAmount: parsed.totalCompMaxAmount ?? null,
+      baseSalary: parsed.baseSalary ?? null, bonus: parsed.bonus ?? null,
+      sourceDate: parsed.sourceDate, annualisedEquivalent: parsed.annualisedEquivalent ?? null,
+      exchangeRateDate: parsed.exchangeRateDate, createdAt: timestamp, updatedAt: timestamp, evidence,
+    } satisfies SalaryEstimateRecord;
+  });
+}
+
 app.post("/api/jobs/:id/salary-estimates", async (request, reply) => {
   const { id: jobPostingId } = request.params as { id: string };
-  if (!listRows().some((job) => job.id === jobPostingId)) return reply.code(404).send({ error: "Job posting not found." });
   const parsed = salaryEstimateCreateSchema.safeParse(request.body);
   if (!parsed.success) return reply.code(400).send({ error: "Check the compensation amounts and source." });
+  if (runtimeDataProvider.name === "postgres") {
+    const saved = await persistHostedSalaryEstimate(trackerContext(request), jobPostingId, parsed.data);
+    return saved ? reply.code(201).send(saved) : reply.code(404).send({ error: "Job posting not found." });
+  }
+  if (!listRows().some((job) => job.id === jobPostingId)) return reply.code(404).send({ error: "Job posting not found." });
   return reply.code(201).send(persistSalaryEstimate(jobPostingId, parsed.data));
 });
 
 app.post("/api/jobs/:id/salary-research", async (request, reply) => {
   const { id: jobPostingId } = request.params as { id: string };
-  const job = listRows().find((item) => item.id === jobPostingId);
+  const hostedDetail = runtimeDataProvider.name === "postgres" ? await trackerRepository.getJobDetail(trackerContext(request), jobPostingId) : null;
+  const job = runtimeDataProvider.name === "postgres"
+    ? hostedDetail?.row as JobRow | undefined
+    : listRows().find((item) => item.id === jobPostingId);
   if (!job) return reply.code(404).send({ error: "Job posting not found." });
   if (!aiProvider.configured || !aiProvider.researchSalary) {
     return reply.code(503).send({ error: "AI web research is not configured. Start CareerOS with the AI key enabled." });
@@ -3923,7 +3981,7 @@ app.post("/api/jobs/:id/salary-research", async (request, reply) => {
       researchedAt: now(),
       durationMs,
     });
-    recordAiRun({
+    await recordHostedAiRun(trackerContext(request), {
       operation: "salary_research",
       contextId: jobPostingId,
       sourceType: "web_search",
@@ -3938,7 +3996,7 @@ app.post("/api/jobs/:id/salary-research", async (request, reply) => {
     return proposal;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Salary research failed.";
-    recordAiRun({
+    await recordHostedAiRun(trackerContext(request), {
       operation: "salary_research", contextId: jobPostingId, sourceType: "web_search", state: "fallback",
       provider: aiProvider.name, model: aiProvider.model, durationMs: Date.now() - startedAt,
       totalDurationMs: Date.now() - startedAt, evidenceCount: 0, warning: message,
@@ -3949,11 +4007,15 @@ app.post("/api/jobs/:id/salary-research", async (request, reply) => {
 
 app.post("/api/jobs/:id/salary-research/commit", async (request, reply) => {
   const { id: jobPostingId } = request.params as { id: string };
-  if (!listRows().some((job) => job.id === jobPostingId)) return reply.code(404).send({ error: "Job posting not found." });
   const parsed = salaryResearchProposalSchema.safeParse(request.body);
   if (!parsed.success || parsed.data.jobPostingId !== jobPostingId) {
     return reply.code(400).send({ error: "The salary proposal is invalid or belongs to another role." });
   }
+  if (runtimeDataProvider.name === "postgres") {
+    const saved = await persistHostedSalaryEstimate(trackerContext(request), jobPostingId, parsed.data.estimate, parsed.data.evidence);
+    return saved ? reply.code(201).send(saved) : reply.code(404).send({ error: "Job posting not found." });
+  }
+  if (!listRows().some((job) => job.id === jobPostingId)) return reply.code(404).send({ error: "Job posting not found." });
   const saved = persistSalaryEstimate(jobPostingId, parsed.data.estimate, parsed.data.evidence);
   return reply.code(201).send(saved);
 });

@@ -1575,10 +1575,53 @@ export function createOpenAiProvider(config: OpenAiProviderConfig): AiProvider {
     async adaptCv(input) {
       const directProposal = directInstructionProposal(input.instructions, input.baseContent, model);
       if (directProposal) return directProposal;
-      const instructionPlan = resolveCvInstructionPlan(input.instructions, input.baseContent);
-      if (instructionPlan.resolution.mode === "narrow" && !instructionPlan.resolution.targets.length) {
-        throw new Error("CareerOS could not safely resolve a CV target from this request. No changes were generated; name the field, entry, group, or whole CV more explicitly.");
+      const requestIntentPlan = async (repairing = false) => {
+        const response = await fetch(`${baseUrl}/responses`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            model,
+            store: false,
+            reasoning: { effort: "medium" },
+            max_output_tokens: 2_500,
+            input: [
+              { role: "developer", content: `Interpret one human CV-edit request into a precise scope plan. The request may contain dictation errors, punctuation errors, informal names, or implied CV concepts. Map introduction/profile summary to targetField intro; contact details to the matching contact field; and location/date/title/subtitle/content to targetSectionField. For all/every requests, enumerate every eligible entry and subtract every explicit exception. Use only IDs from availableCvEntries, never invent IDs, and never perform edits. If wording such as "Singapore please force" closely matches an available entry such as "Singapore Police Force", resolve it to that entry. Return broad only when the user genuinely asks to tailor or improve the whole CV without naming a narrower field or subset.${repairing ? " Repair the prior malformed scope response." : ""}` },
+              { role: "user", content: JSON.stringify({
+                userInstructions: input.instructions,
+                availableCvEntries: input.baseContent.sections.map((section) => ({ id: section.id, groupTitle: section.groupTitle ?? inferredGroupTitle(section), evidenceType: section.evidenceType, title: section.title, subtitle: section.subtitle ?? "", date: section.date ?? "", location: section.location ?? "" })),
+              }) },
+            ],
+            text: { format: { type: "json_schema", name: "careeros_cv_intent", strict: true, schema: cvIntentJsonSchema } },
+          }),
+          signal: AbortSignal.timeout(Math.max(timeoutMs, 45_000)),
+        });
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({})) as { error?: { message?: string } };
+          throw new Error(errorBody.error?.message || `OpenAI CV scope interpretation failed with HTTP ${response.status}.`);
+        }
+        const outputText = responseOutputText(await response.json());
+        try {
+          if (!outputText) throw new Error("OpenAI returned no structured CV scope.");
+          return resolveCvIntentPlan(aiCvIntentSchema.parse(JSON.parse(outputText)), input.baseContent);
+        } catch (cause) {
+          if (!repairing) return requestIntentPlan(true);
+          const reason = cause instanceof Error ? cause.message : "invalid structured output";
+          throw new Error(`OpenAI could not resolve this CV request safely after one repair attempt: ${reason}`);
+        }
+      };
+      let instructionPlan: CvInstructionPlan;
+      const needsSemanticScopePlan = /\b(?:all|every|everything|throughout|across)\b/i.test(input.instructions)
+        && /\b(?:except|excluding|apart from|other than|but|leave|keep|without)\b/i.test(input.instructions);
+      if (needsSemanticScopePlan) {
+        instructionPlan = await requestIntentPlan();
+      } else {
+        try {
+          instructionPlan = resolveCvInstructionPlan(input.instructions, input.baseContent);
+        } catch {
+          instructionPlan = await requestIntentPlan();
+        }
       }
+      if (instructionPlan.resolution.mode === "narrow" && !instructionPlan.resolution.targets.length) instructionPlan = await requestIntentPlan();
       const requestCoveragePlan = async (eligibleTargets: CvResolvedTarget[], missingTargets: CvResolvedTarget[] = [], repairingMalformed = false): Promise<AiCvCoveragePlan> => {
         const response = await fetch(`${baseUrl}/responses`, {
           method: "POST",

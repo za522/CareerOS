@@ -355,6 +355,52 @@ test("rejecting every proposal preserves byte-equivalent CV content and persists
   await expect(page.getByRole("textbox", { name: "CV name", exact: true })).toHaveText("Zain Ahmad");
 });
 
+test("previews every proposed location, focuses one on hover, and persists Accept all", async ({ page, request }) => {
+  const jobId = await seedStudio(request);
+  await seedDraft(request, jobId);
+  await page.goto(`/career-studio/jobs/${jobId}/cv`);
+  await waitForPersistedDraft(request, jobId);
+  let targetIds: string[] = [];
+  await mockTailoring(page, jobId, (baseContent) => {
+    targetIds = baseContent.sections.filter((section: any) => section.evidenceType !== "skill").slice(0, 2).map((section: any) => section.id);
+    return targetIds.map((targetSectionId, index) => {
+      const section = baseContent.sections.find((item: any) => item.id === targetSectionId);
+      return proposalChange({
+        changeKey: `location-${index}`,
+        targetSectionField: "location",
+        targetSectionId,
+        originalTitle: `${section.title} location`,
+        originalContent: section.location ?? "",
+        proposedTitle: `${section.title} location`,
+        proposedContent: "London",
+      });
+    });
+  });
+
+  const prompt = page.getByLabel("Ask AI to propose CV changes");
+  await prompt.fill("Change all locations to London except Singapore Police Force");
+  await prompt.press("Enter");
+  await expect(page.locator(".studio-cv-record.change-preview-rewrite")).toHaveCount(2);
+
+  const firstProposal = page.locator(".studio-change").first();
+  await firstProposal.hover();
+  await expect(page.locator(".studio-cv-record.change-preview-rewrite")).toHaveCount(1);
+  await expect(page.locator(`[data-section-id="${targetIds[0]}"]`)).toHaveClass(/change-preview-rewrite/);
+  await page.locator(".studio-pane-heading", { hasText: "AI changes" }).hover();
+  await expect(page.locator(".studio-cv-record.change-preview-rewrite")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Accept all" }).click();
+  await expect(page.locator(".studio-cv-record.change-preview-rewrite")).toHaveCount(0);
+  await expect.poll(async () => {
+    const workspace = await studioWorkspace(request, jobId);
+    return targetIds.map((id) => workspace.documents[0].draftContent.sections.find((section: any) => section.id === id)?.location);
+  }).toEqual(["London", "London"]);
+
+  await page.reload();
+  for (const id of targetIds) await expect(page.locator(`[data-section-id="${id}"] .studio-entry-location`)).toHaveText("London");
+  await expect(page.locator(".studio-change.change-accepted")).toHaveCount(2);
+});
+
 test("older unresolved proposal turns remain actionable and protect newer manual state", async ({ page, request }) => {
   const jobId = await seedStudio(request);
   await seedDraft(request, jobId);

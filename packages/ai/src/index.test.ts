@@ -156,6 +156,42 @@ describe("CV request resolution regressions", () => {
 });
 
 describe("CV evidence safety regressions", () => {
+  it("uses an LLM scope plan for a dictated all-except location request, then validates the actual entry IDs", async () => {
+    const scopePlan = {
+      mode: "targeted",
+      targetField: null,
+      targetSectionField: "location",
+      targetSectionIds: ["police-award", "sagecare"],
+      excludedSectionIds: ["police-role"],
+      requestedValue: "London",
+      interpretation: "Set every entry location to London except Singapore Police Force.",
+    };
+    const output = {
+      intent: intent(["police-award", "sagecare"], {
+        targetSectionField: "location",
+        excludedSectionIds: ["police-role"],
+        requestedValue: "London",
+      }),
+      changes: [
+        change("police-award", "London", [evidenceA], { targetSectionField: "location", proposedEvidenceType: "achievement", proposedTitle: "Singapore Police Force Commander Awards location" }),
+        change("sagecare", "London", [evidenceB], { targetSectionField: "location", proposedTitle: "SageCare location" }),
+      ],
+      matches: [], gaps: [], summary: "Two locations ready.",
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(modelResponse(scopePlan))
+      .mockResolvedValueOnce(modelResponse(output));
+    const provider = createOpenAiProvider({ apiKey: "test", model: "test" });
+    const result = await provider.adaptCv!(providerInput("change location of everything to london except for singapore please force"));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(result.changes.map((item) => [item.targetSectionId, item.targetSectionField, item.proposedContent])).toEqual([
+      ["police-award", "location", "London"],
+      ["sagecare", "location", "London"],
+    ]);
+    expect(result.tailoredContent.sections.find((item) => item.id === "police-role")?.location ?? "").toBe("");
+  });
+
   it("rejects invented claims even when the model cites a real evidence ID", async () => {
     const output = {
       intent: intent(["sagecare"]),
@@ -496,6 +532,15 @@ describe("resolved plan validation", () => {
   });
 
   it("validates generic all-except scope and protects the excluded entry", async () => {
+    const scopePlan = {
+      mode: "targeted",
+      targetField: null,
+      targetSectionField: null,
+      targetSectionIds: ["police-role", "police-award"],
+      excludedSectionIds: ["sagecare"],
+      requestedValue: null,
+      interpretation: "Rewrite every entry except SageCare.",
+    };
     const output = {
       intent: intent(["police-role", "police-award"], { excludedSectionIds: ["sagecare"] }),
       changes: [
@@ -504,7 +549,9 @@ describe("resolved plan validation", () => {
       ],
       matches: [], gaps: [], summary: "Two concise rewrites.",
     };
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(modelResponse(output));
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(modelResponse(scopePlan))
+      .mockResolvedValueOnce(modelResponse(output));
     const provider = createOpenAiProvider({ apiKey: "test", model: "test" });
     const result = await provider.adaptCv!(providerInput("Make every entry more concise except SageCare"));
     expect(result.changes.map((item) => item.targetSectionId)).toEqual(["police-role", "police-award"]);

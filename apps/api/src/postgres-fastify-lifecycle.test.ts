@@ -182,6 +182,83 @@ describe("PostgreSQL Fastify lifecycle", () => {
     expect(detail.json()).not.toHaveProperty("salaryEstimates");
   });
 
+  it("creates and commits salary estimates through hosted PostgreSQL routes", async () => {
+    const createdJob = await app.inject({
+      method: "POST",
+      url: "/api/jobs",
+      headers: authorization,
+      payload: { title: "Graduate Software Engineer", companyName: "Salary Capital", sector: "Technology", location: "London" },
+    });
+    expect(createdJob.statusCode).toBe(201);
+    const jobId = createdJob.json().id as string;
+
+    const manual = await app.inject({
+      method: "POST",
+      url: `/api/jobs/${jobId}/salary-estimates`,
+      headers: authorization,
+      payload: { estimateType: "researched", minAmount: 55_000, maxAmount: 70_000, currency: "GBP", sourceName: "Public salary survey" },
+    });
+    expect(manual.statusCode).toBe(201);
+    expect(manual.json()).toMatchObject({ estimateType: "researched", minAmount: 55_000, maxAmount: 70_000, currency: "GBP" });
+
+    const proposal = {
+      jobPostingId: jobId,
+      inferredRoleTitle: "Graduate Software Engineer",
+      inferredLevel: "Graduate",
+      estimate: {
+        estimateType: "ai_assisted",
+        baseMinAmount: 60_000,
+        baseMaxAmount: 78_000,
+        totalCompMinAmount: 65_000,
+        totalCompMaxAmount: 90_000,
+        currency: "GBP",
+        paymentPeriod: "annual",
+        sourceName: "CareerOS salary research",
+        sourceUrl: "https://example.com/salary",
+        confidence: 0.8,
+        researchNotes: "Comparable graduate software roles in London.",
+      },
+      evidence: [{
+        sourceName: "Public salary survey",
+        sourceUrl: "https://example.com/salary",
+        sourceDate: "2026-08-09",
+        roleTitle: "Graduate Software Engineer",
+        location: "London",
+        seniority: "Graduate",
+        compensationScope: "base",
+        minAmount: 60_000,
+        maxAmount: 78_000,
+        currency: "GBP",
+        paymentPeriod: "annual",
+        excerpt: "Comparable graduate software engineer salary range.",
+        confidence: 0.8,
+      }],
+      confidence: 0.8,
+      rationale: "A public comparable supports this directional estimate.",
+      warnings: ["The employer did not publish compensation."],
+      provider: "openai",
+      model: "test-model",
+      researchedAt: "2026-08-09T12:00:00.000Z",
+      durationMs: 100,
+    };
+    const committed = await app.inject({
+      method: "POST",
+      url: `/api/jobs/${jobId}/salary-research/commit`,
+      headers: authorization,
+      payload: proposal,
+    });
+    expect(committed.statusCode).toBe(201);
+    expect(committed.json()).toMatchObject({ estimateType: "ai_assisted", baseMinAmount: 60_000, baseMaxAmount: 78_000 });
+    expect(committed.json().evidence).toEqual([expect.objectContaining({ sourceName: "Public salary survey", minAmount: 60_000 })]);
+
+    const detail = await app.inject({ method: "GET", url: `/api/jobs/${jobId}`, headers: authorization });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().salaries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ estimateType: "researched", minAmount: 55_000 }),
+      expect.objectContaining({ estimateType: "ai_assisted", baseMinAmount: 60_000, evidence: [expect.objectContaining({ sourceName: "Public salary survey" })] }),
+    ]));
+  });
+
   it("runs the hosted capture lifecycle through PostgreSQL with durable review and duplicate handling", async () => {
     const payload = { items: [{ sourceType: "pasted_text", text: "Quant Trading Graduate\nCompany: Lifecycle Capital\nLocation: London\nRole requirements: Python and probability." }] };
     const queued = await app.inject({ method: "POST", url: "/api/capture-queue", headers: authorization, payload });

@@ -68,6 +68,7 @@ export const POSTGRES_CONVERTED_API_PATHS = [
   /^\/api\/profile(?:\/.*)?(?:\?|$)/,
   /^\/api\/career-studio(?:\?|$)/,
   /^\/api\/jobs\/[^/]+\/(application-studio|document-drafts|cv-tailoring|document-versions)(?:\?|$)/,
+  /^\/api\/jobs\/[^/]+\/(salary-estimates|salary-research(?:\/commit)?)(?:\?|$)/,
   /^\/api\/document-versions\/[^/]+\/pdf(?:\?|$)/,
   /^\/api\/ai\/runs(?:\?|$)/,
   /^\/api\/(export|restore)(?:\?|$)/,
