@@ -136,6 +136,12 @@ describe("PostgreSQL Fastify lifecycle", () => {
     expect(discoveryRunDue).not.toHaveBeenCalled();
   });
 
+  it("allows the authenticated browser to preview a downloaded PDF blob", async () => {
+    const response = await app.inject({ method: "GET", url: "/health" });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-security-policy"]).toContain("frame-src 'self' blob:");
+  });
+
   it("seeds hosted discovery and reports never-successful and overdue sources as unhealthy", async () => {
     const seeded = await app.inject({ method: "GET", url: "/api/discovery?limit=100", headers: authorization });
     expect(seeded.statusCode).toBe(200);
@@ -339,8 +345,14 @@ describe("PostgreSQL Fastify lifecycle", () => {
     await database.query(`INSERT INTO source_documents(id,workspace_id,source_type,raw_text,content_hash,captured_at,metadata)
       VALUES('source-studio','00000000-0000-4000-8000-000000000001','profile_document','Zain Ahmad\nDesign Engineer\nBuilt reliable systems.','studio',now(),$1::jsonb)`,
     [JSON.stringify({ documentId, extractionWarning: null })]);
-    const sectionId = "experience";
-    const content = { name: "Zain Ahmad", headline: "Design Engineer", intro: "Focused introduction.", contact: { email: "zain@example.com", phone: "", website: "https://example.com" }, sections: [{ id: sectionId, evidenceType: "experience", title: "Experience", content: "Built reliable systems.", sourceEvidenceIds: [] }] };
+    const profile = (await app.inject({ method: "GET", url: "/api/profile", headers: authorization })).json();
+    const importedEvidenceId = "73000000-0000-4000-8000-000000000007";
+    await database.query(`INSERT INTO profile_evidence(id,workspace_id,profile_id,evidence_type,title,content)
+      VALUES($1,'00000000-0000-4000-8000-000000000001',$2,'experience','Krislite','Designed and prototyped fibre-optic lighting systems.')`, [importedEvidenceId, profile.id]);
+    await database.query(`INSERT INTO field_evidence(id,workspace_id,entity_type,entity_id,field_path,source_document_id,excerpt,method,suggested_value,confidence,user_confirmed,captured_at)
+      VALUES('74000000-0000-4000-8000-000000000007','00000000-0000-4000-8000-000000000001','ProfileEvidence',$1,'content','source-studio','Built reliable systems.','ai_generated','Designed and prototyped fibre-optic lighting systems.',0.9,true,now())`, [importedEvidenceId]);
+    const sectionId = "source:source-studio";
+    const content = { name: "Zain Ahmad", headline: "Design Engineer", intro: "Focused introduction.", contact: { email: "zain@example.com", phone: "", website: "https://example.com" }, sections: [{ id: sectionId, evidenceType: "other", title: "Imported CV", content: "Zain Ahmad\nDesign Engineer\nBuilt reliable systems.", sourceEvidenceIds: [] }] };
     const initial = await app.inject({ method: "PUT", url: `/api/jobs/${jobId}/document-drafts`, headers: authorization, payload: { documentId, content, proposalState: { turns: [], activeTurnId: null }, expectedRevision: null } });
     expect(initial.statusCode).toBe(200);
     const updatedContent = { ...content, intro: "Newer shared introduction." };
@@ -348,7 +360,13 @@ describe("PostgreSQL Fastify lifecycle", () => {
     expect((await app.inject({ method: "PUT", url: `/api/jobs/${jobId}/document-drafts`, headers: authorization, payload: { documentId, content, proposalState: { turns: [], activeTurnId: null }, expectedRevision: 1 } })).statusCode).toBe(409);
     const reopened = await app.inject({ method: "GET", url: `/api/jobs/${jobId}/application-studio`, headers: authorization });
     expect(reopened.statusCode).toBe(200);
-    expect(reopened.json().documents[0]).toMatchObject({ draftRevision: 2, draftContent: { intro: "Newer shared introduction." } });
+    expect(reopened.json().documents[0]).toMatchObject({ draftRevision: 2, draftContent: { intro: "Newer shared introduction.", sections: [{ id: importedEvidenceId, title: "Krislite" }] } });
+    expect(reopened.json().documents[0].baseContent.sections).toEqual([
+      expect.objectContaining({ id: importedEvidenceId, evidenceType: "experience", title: "Krislite" }),
+    ]);
+    expect(reopened.json().documents[0].baseContent.sections).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: "Imported CV" }),
+    ]));
     const snapshot = await app.inject({ method: "POST", url: `/api/jobs/${jobId}/document-versions`, headers: authorization, payload: {
       documentId, parentVersionId: null, expectedDraftRevision: 2, checkpointName: "Submitted lifecycle CV", content: updatedContent,
       acceptedChangeIds: [], proposalChanges: [], proposalDecisions: {}, changeSummary: "Lifecycle", provider: "manual", model: "",

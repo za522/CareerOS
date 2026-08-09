@@ -128,6 +128,7 @@ await app.register(helmet, { contentSecurityPolicy: { directives: {
   connectSrc: ["'self'", ...supabaseConnectOrigins],
   fontSrc: ["'self'", "data:"],
   frameAncestors: ["'none'"],
+  frameSrc: ["'self'", "blob:"],
   imgSrc: ["'self'", "data:", "https:"],
   objectSrc: ["'none'"],
   scriptSrc: ["'self'"],
@@ -1130,11 +1131,20 @@ async function ensureHostedProfile(context: ReturnType<typeof trackerContext>): 
 async function hostedDocumentSource(context: ReturnType<typeof trackerContext>, documentId: string) {
   if (runtimeDataProvider.name !== "postgres") return null;
   return runtimeDataProvider.postgres.transaction(context, async (tx) => {
-    const result = await tx.query<Record<string, unknown>>(`SELECT id,raw_text,metadata FROM source_documents
-      WHERE workspace_id=$1 AND metadata->>'documentId'=$2 ORDER BY captured_at DESC LIMIT 1`, [context.workspaceId, documentId]);
+    const result = await tx.query<Record<string, unknown>>(`SELECT sd.id,sd.raw_text,sd.metadata,
+      COALESCE((SELECT array_agg(DISTINCT fe.entity_id ORDER BY fe.entity_id)
+        FROM field_evidence fe WHERE fe.workspace_id=sd.workspace_id AND fe.source_document_id=sd.id
+          AND fe.entity_type='ProfileEvidence' AND fe.deleted_at IS NULL),ARRAY[]::text[]) AS evidence_ids
+      FROM source_documents sd WHERE sd.workspace_id=$1 AND sd.metadata->>'documentId'=$2
+      ORDER BY sd.captured_at DESC LIMIT 1`, [context.workspaceId, documentId]);
     const row = result.rows[0];
     if (!row) return null;
-    return { id: String(row.id), rawText: String(row.raw_text ?? ""), metadata: row.metadata as Record<string, unknown> };
+    return {
+      id: String(row.id),
+      rawText: String(row.raw_text ?? ""),
+      metadata: row.metadata as Record<string, unknown>,
+      evidenceIds: Array.isArray(row.evidence_ids) ? row.evidence_ids.map(String) : [],
+    };
   }, { readOnly: true });
 }
 
@@ -1145,27 +1155,35 @@ async function hostedStudioDocument(context: ReturnType<typeof trackerContext>, 
     postgresApplicationStudio.listVersions(context, document.id, jobPostingId),
     postgresApplicationStudio.loadDraft(context, document.id, jobPostingId),
   ]);
-  const sourceSections = source?.rawText
-    ? [{ id: `source:${source.id}`, evidenceType: "other" as const, title: "Imported CV", content: source.rawText.slice(0, 20_000), sourceEvidenceIds: [source.id] }]
-    : profile.sections.map((section) => ({ id: section.id, evidenceType: section.evidenceType, title: section.title, content: section.content, sourceEvidenceIds: [section.id] }));
+  const linkedEvidenceIds = new Set(source?.evidenceIds ?? []);
+  const linkedSections = profile.sections.filter((section) => linkedEvidenceIds.has(section.id));
+  const sourceSections = linkedSections.length
+    ? linkedSections.map((section) => ({ id: section.id, evidenceType: section.evidenceType, title: section.title, content: section.content, sourceEvidenceIds: [section.id] }))
+    : source?.rawText
+      ? [{ id: `source:${source.id}`, evidenceType: "other" as const, title: "Imported CV", content: source.rawText.slice(0, 20_000), sourceEvidenceIds: [source.id] }]
+      : profile.sections.map((section) => ({ id: section.id, evidenceType: section.evidenceType, title: section.title, content: section.content, sourceEvidenceIds: [section.id] }));
   const savedVersions = versions.map(hostedVersionRecord);
   const candidateText = savedVersions[0]?.plainText || source?.rawText || sourceSections.map((section) => section.content).join("\n");
   const warning = extractionWarning(candidateText, document.mimeType.includes("pdf") ? "PDF" : "CV");
+  const baseContent = normaliseCvContent({
+    name: profile.name,
+    headline: profile.headline,
+    intro: profile.summary || profile.headline,
+    contact: extractCvContact(source?.rawText ?? candidateText),
+    style: { fontFamily: "manrope", fontSize: 10.5, sectionSpacing: 12, entrySpacing: 3, headerSpacing: 4, lineHeight: 1.38, nameAlignment: "center" },
+    inlineFormatting: [],
+    sections: sourceSections,
+  });
+  const persistedDraft = draft ? normaliseCvContent(draft.content) : null;
+  const legacyRawTextDraft = Boolean(source && linkedSections.length && persistedDraft?.sections.length === 1
+    && persistedDraft.sections[0]?.id === `source:${source.id}` && persistedDraft.sections[0]?.title === "Imported CV");
   return {
     document,
     sourceDocumentId: source?.id ?? null,
     usable: !warning,
     qualityWarning: warning,
-    baseContent: normaliseCvContent({
-      name: profile.name,
-      headline: profile.headline,
-      intro: profile.summary || profile.headline,
-      contact: extractCvContact(source?.rawText ?? candidateText),
-      style: { fontFamily: "manrope", fontSize: 10.5, sectionSpacing: 12, entrySpacing: 3, headerSpacing: 4, lineHeight: 1.38, nameAlignment: "center" },
-      inlineFormatting: [],
-      sections: sourceSections,
-    }),
-    draftContent: draft ? normaliseCvContent(draft.content) : null,
+    baseContent,
+    draftContent: legacyRawTextDraft && persistedDraft ? { ...persistedDraft, sections: baseContent.sections } : persistedDraft,
     draftProposalState: draft?.proposalState ?? cvProposalStateSchema.parse({ turns: [], activeTurnId: null }),
     draftUpdatedAt: draft?.updatedAt ?? null,
     draftRevision: draft?.revision ?? null,
