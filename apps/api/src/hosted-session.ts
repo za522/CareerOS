@@ -65,7 +65,12 @@ export class HostedSessionService {
       headers: { apikey: this.#anonKey, "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    if (!response.ok) throw Object.assign(new Error("Your Google sign-in session expired. Sign in again."), { statusCode: 401 });
+    if (!response.ok) {
+      if ([400, 401, 403].includes(response.status)) {
+        throw Object.assign(new Error("Your Google sign-in session expired. Sign in again."), { statusCode: 401 });
+      }
+      throw Object.assign(new Error("Google sign-in is temporarily unavailable. CareerOS will try again."), { statusCode: 503 });
+    }
     const body = await response.json() as Partial<HostedBrowserSession>;
     if (!body.access_token || !body.refresh_token || !body.user || typeof body.expires_in !== "number") {
       throw Object.assign(new Error("The identity provider returned an incomplete session."), { statusCode: 502 });

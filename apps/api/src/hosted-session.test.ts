@@ -46,4 +46,16 @@ describe("hosted browser sessions", () => {
     const encrypted = cookie.match(/^careeros_session=([^;]+)/)?.[1] ?? "";
     expect(service.refreshTokenFromCookie(encrypted)).toBe("rotated-refresh-token-value");
   });
+
+  it("distinguishes an expired identity session from a temporary provider failure", async () => {
+    const env = {
+      CAREEROS_HOSTED: "1", CAREEROS_SESSION_ENCRYPTION_KEY: keyValue,
+      SUPABASE_URL: "https://example.supabase.co", SUPABASE_ANON_KEY: "anon-key",
+    };
+    const expired = new HostedSessionService({ env, fetch: vi.fn(async () => new Response("{}", { status: 400 })) as typeof fetch });
+    const unavailable = new HostedSessionService({ env, fetch: vi.fn(async () => new Response("{}", { status: 503 })) as typeof fetch });
+
+    await expect(expired.rotate("expired-token")).rejects.toMatchObject({ statusCode: 401 });
+    await expect(unavailable.rotate("valid-token")).rejects.toMatchObject({ statusCode: 503 });
+  });
 });

@@ -3042,8 +3042,10 @@ app.post("/api/auth/session/refresh", { config: { rateLimit: { max: 30, timeWind
     reply.header("set-cookie", hostedSessions.cookie(session, process.env.NODE_ENV === "production"));
     return hostedSessions.publicSession(session);
   } catch (error) {
-    reply.header("set-cookie", hostedSessions.clearCookie(process.env.NODE_ENV === "production"));
     const statusCode = typeof error === "object" && error && "statusCode" in error ? Number(error.statusCode) : 502;
+    if (statusCode === 401 || statusCode === 403) {
+      reply.header("set-cookie", hostedSessions.clearCookie(process.env.NODE_ENV === "production"));
+    }
     return reply.code(statusCode).send({ error: error instanceof Error ? error.message : "Google sign-in could not be refreshed." });
   }
 });

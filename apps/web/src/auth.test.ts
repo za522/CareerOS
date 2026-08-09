@@ -1,6 +1,6 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import { createPkceOnlyStorage, exchangeOAuthCallback } from "./auth";
+import { createPkceOnlyStorage, exchangeOAuthCallback, shouldDiscardSessionAfterRefresh } from "./auth";
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -67,5 +67,15 @@ describe("hosted OAuth callback", () => {
 
     expect(replaceUrl).toHaveBeenCalledWith("/");
     expect(authClient.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("hosted session refresh", () => {
+  it("discards only sessions that the server has definitively rejected", () => {
+    expect(shouldDiscardSessionAfterRefresh(401)).toBe(true);
+    expect(shouldDiscardSessionAfterRefresh(403)).toBe(true);
+    expect(shouldDiscardSessionAfterRefresh(429)).toBe(false);
+    expect(shouldDiscardSessionAfterRefresh(502)).toBe(false);
+    expect(shouldDiscardSessionAfterRefresh(503)).toBe(false);
   });
 });

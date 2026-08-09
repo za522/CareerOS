@@ -57,6 +57,16 @@ function setCurrentSession(session: Session | null) {
   for (const listener of authListeners) listener(session);
 }
 
+export function shouldDiscardSessionAfterRefresh(status: number) {
+  return status === 401 || status === 403;
+}
+
+function retryServerSessionRefresh(delayMs = 15_000) {
+  if (!currentSession) return;
+  if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+  refreshTimer = window.setTimeout(() => void refreshServerSession(), delayMs);
+}
+
 async function sessionResponse(response: Response) {
   if (!response.ok) return null;
   const session = await response.json() as Omit<Session, "refresh_token">;
@@ -79,10 +89,23 @@ async function exchangeServerSession(refreshToken: string) {
 }
 
 async function refreshServerSession() {
-  const response = await fetch(`${apiBaseUrl}/api/auth/session/refresh`, { method: "POST", credentials: "include" });
-  const session = await sessionResponse(response);
-  setCurrentSession(session);
-  return session;
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/auth/session/refresh`, { method: "POST", credentials: "include" });
+    if (shouldDiscardSessionAfterRefresh(response.status)) {
+      setCurrentSession(null);
+      return null;
+    }
+    const session = await sessionResponse(response);
+    if (!session) {
+      retryServerSessionRefresh();
+      return currentSession;
+    }
+    setCurrentSession(session);
+    return session;
+  } catch {
+    retryServerSessionRefresh();
+    return currentSession;
+  }
 }
 
 export async function loadAuthConfig(): Promise<AuthConfig> {

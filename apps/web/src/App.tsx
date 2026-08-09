@@ -213,6 +213,9 @@ export function App() {
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const activeRouteRef = useRef<AppRoute>(initialRoute);
   const navigationGuardRef = useRef<(() => Promise<boolean>) | null>(null);
+  const jobsRequestVersionRef = useRef(0);
+  const foregroundRequestsRef = useRef(0);
+  const backgroundRefreshInFlightRef = useRef(false);
 
   const applyRoute = (route: AppRoute) => {
     activeRouteRef.current = route;
@@ -230,6 +233,7 @@ export function App() {
       const state = { careeros: true, fromPath: replace ? null : window.location.pathname };
       window.history[replace ? "replaceState" : "pushState"](state, "", path);
       applyRoute(route);
+      window.dispatchEvent(new Event("careeros:navigation"));
     };
     void complete();
   };
@@ -259,21 +263,33 @@ export function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const loadJobs = async () => {
-    setLoading(true);
-    setError("");
+  const loadJobs = async (options: { background?: boolean; includeMeta?: boolean } = {}) => {
+    const background = options.background ?? false;
+    const includeMeta = options.includeMeta ?? !background;
+    const requestVersion = ++jobsRequestVersionRef.current;
+    if (!background) {
+      foregroundRequestsRef.current += 1;
+      setLoading(true);
+      setError("");
+    }
     try {
       const [nextJobs, meta] = await Promise.all([
         client.listJobs({ search, status: statusFilter, sector: sectorFilter, applied: appliedFilter === "All" ? "" : appliedFilter === "Applied" ? "yes" : "no" }),
-        client.getMeta(),
+        includeMeta ? client.getMeta() : Promise.resolve(null),
       ]);
+      if (requestVersion !== jobsRequestVersionRef.current) return;
       setJobs(nextJobs);
-      setSectors(meta.sectors ?? []);
+      if (meta) setSectors(meta.sectors ?? []);
       if (selectedId && !nextJobs.some((job) => job.id === selectedId)) setSelectedId(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The local API is not available yet.");
+      if (requestVersion === jobsRequestVersionRef.current && !background) {
+        setError(cause instanceof Error ? cause.message : "The local API is not available yet.");
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        foregroundRequestsRef.current = Math.max(0, foregroundRequestsRef.current - 1);
+        if (foregroundRequestsRef.current === 0) setLoading(false);
+      }
     }
   };
 
@@ -293,21 +309,40 @@ export function App() {
   useEffect(() => {
     const refreshFromCollaborator = () => {
       setRemoteMutationTick((current) => current + 1);
-      void loadJobs();
-      if (selectedId) void client.getJob(selectedId).then(setSelectedJob).catch(() => undefined);
+      void loadJobs({ background: true, includeMeta: false });
+      if (selectedId) void client.getJob(selectedId).then((next) => {
+        setSelectedJob((current) => current?.id === next.id && current.revision === next.revision ? current : next);
+      }).catch(() => undefined);
     };
     window.addEventListener("careeros:remote-mutation", refreshFromCollaborator);
     return () => window.removeEventListener("careeros:remote-mutation", refreshFromCollaborator);
   }, [selectedId, search, statusFilter, sectorFilter, appliedFilter]);
 
   useEffect(() => {
-    if (!workspaceSession?.hosted) return;
-    const timer = window.setInterval(() => {
-      void loadJobs();
-      if (selectedId) void client.getJob(selectedId).then(setSelectedJob).catch(() => undefined);
-    }, 5_000);
-    return () => window.clearInterval(timer);
-  }, [workspaceSession?.hosted, selectedId, search, statusFilter, sectorFilter, appliedFilter]);
+    if (!workspaceSession?.hosted || page !== "opportunities") return;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible" || backgroundRefreshInFlightRef.current) return;
+      backgroundRefreshInFlightRef.current = true;
+      try {
+        await loadJobs({ background: true, includeMeta: false });
+        if (selectedId) {
+          const next = await client.getJob(selectedId);
+          setSelectedJob((current) => current?.id === next.id && current.revision === next.revision ? current : next);
+        }
+      } catch {
+        // Individual requests already record diagnostics. Keep the current view stable.
+      } finally {
+        backgroundRefreshInFlightRef.current = false;
+      }
+    };
+    const timer = window.setInterval(() => void refresh(), 30_000);
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [workspaceSession?.hosted, page, selectedId, search, statusFilter, sectorFilter, appliedFilter]);
 
   useEffect(() => {
     if (!selectedId) { setSelectedJob(null); return; }
@@ -469,7 +504,7 @@ export function App() {
 
         <section className="workspace-table" aria-label="Opportunities table">
           <div className="table-head table-grid"><span className="index-cell">#</span><span>Opportunity</span><span>Track</span><span>Where</span><span>Deadline</span><span>Salary</span><span>Application</span><span>Employer posted</span><span>CareerOS updated</span></div>
-          {loading ? <div className="table-state"><LoaderCircle className="spin" size={20} /><span>Loading your pipeline...</span></div> : jobs.length === 0 ? (canEditWorkspace ? <EmptyState onAdd={() => { setReview(null); setImportOpen(true); }} onManual={openManual} /> : <div className="table-state"><BriefcaseBusiness size={20} /><span>No shared opportunities yet.</span></div>) : jobs.map((job) => <JobRowItem key={job.id} job={job} selected={job.id === selectedId} canResearchSalary={canEditWorkspace} onClick={() => navigate({ page: "opportunities", selectedId: job.id, studioJobId: null })} onResearchSalary={() => { navigate({ page: "opportunities", selectedId: job.id, studioJobId: null }); setSalaryResearchId(job.id); }} />)}
+          {loading && jobs.length === 0 ? <div className="table-state"><LoaderCircle className="spin" size={20} /><span>Loading your pipeline...</span></div> : jobs.length === 0 ? (canEditWorkspace ? <EmptyState onAdd={() => { setReview(null); setImportOpen(true); }} onManual={openManual} /> : <div className="table-state"><BriefcaseBusiness size={20} /><span>No shared opportunities yet.</span></div>) : jobs.map((job) => <JobRowItem key={job.id} job={job} selected={job.id === selectedId} canResearchSalary={canEditWorkspace} onClick={() => navigate({ page: "opportunities", selectedId: job.id, studioJobId: null })} onResearchSalary={() => { navigate({ page: "opportunities", selectedId: job.id, studioJobId: null }); setSalaryResearchId(job.id); }} />)}
         </section>
         </> : page === "capture" ? <CaptureInbox onBatchSaved={() => void loadJobs()} onReview={(item: CaptureQueueItem) => {
           void client.getCapture(item.id).then((fullItem) => {

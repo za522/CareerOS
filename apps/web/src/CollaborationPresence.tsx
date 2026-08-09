@@ -51,8 +51,11 @@ export function CollaborationPresence({ session, compact = false }: { session: W
   useEffect(() => {
     const updatePath = () => setPath(window.location.pathname + window.location.hash);
     window.addEventListener("popstate", updatePath);
-    const timer = window.setInterval(updatePath, 500);
-    return () => { window.removeEventListener("popstate", updatePath); window.clearInterval(timer); };
+    window.addEventListener("careeros:navigation", updatePath);
+    return () => {
+      window.removeEventListener("popstate", updatePath);
+      window.removeEventListener("careeros:navigation", updatePath);
+    };
   }, []);
   const me = useMemo<Presence | null>(() => session?.hosted ? {
     userId: session.user.memberId,

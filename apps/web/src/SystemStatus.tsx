@@ -104,6 +104,7 @@ export function SystemStatus() {
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyFeedback, setKeyFeedback] = useState("");
   const previousBackend = useRef<SystemSnapshot["backend"]>("checking");
+  const refreshInFlight = useRef(false);
   const closePanel = useCallback(() => setOpen(false), []);
   const panelRef = useDialogFocus<HTMLElement>({ open, onClose: closePanel });
 
@@ -118,21 +119,23 @@ export function SystemStatus() {
   }, []);
 
   const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setChecking(true);
-    const next = await checkSystemStatus();
-    if (previousBackend.current === "online" && next.backend === "offline") {
-      addDiagnostic({
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        source: "System",
-        operation: "Backend health check",
-        message: "CareerOS API stopped responding on port 4310.",
-      });
-    }
-    previousBackend.current = next.backend;
-    setStatus(next);
-    if (next.backend === "online") {
-      try {
+    try {
+      const next = await checkSystemStatus();
+      if (previousBackend.current === "online" && next.backend === "offline") {
+        addDiagnostic({
+          id: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
+          source: "System",
+          operation: "Backend health check",
+          message: "CareerOS API stopped responding on port 4310.",
+        });
+      }
+      previousBackend.current = next.backend;
+      setStatus(next);
+      if (next.backend === "online") {
         const [runs, serviceHealth, meta] = await Promise.all([client.listAiRuns(6), client.getSystemHealth(), client.getMeta()]);
         setAiRuns(runs);
         setServices(serviceHealth);
@@ -143,16 +146,18 @@ export function SystemStatus() {
           model: meta.ai.model,
           keySource: meta.ai.configured ? "environment" : "none",
         }));
-      } catch {
-        // Request diagnostics already capture the failure; keep the last known ledger rows.
       }
+    } catch {
+      // Request diagnostics already capture the failure; keep the last known ledger rows.
+    } finally {
+      setChecking(false);
+      refreshInFlight.current = false;
     }
-    setChecking(false);
   }, [addDiagnostic]);
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), 12_000);
+    const interval = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 30_000);
     const onFocus = () => void refresh();
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     window.addEventListener("focus", onFocus);
