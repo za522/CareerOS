@@ -59,7 +59,7 @@ export class HostedSessionService {
 
   async rotate(refreshToken: string): Promise<HostedBrowserSession> {
     if (!this.enabled || !this.#key) throw Object.assign(new Error("Hosted sessions are not enabled."), { statusCode: 409 });
-    if (!refreshToken || refreshToken.length < 20) throw Object.assign(new Error("The Google sign-in session is invalid."), { statusCode: 401 });
+    if (!refreshToken || refreshToken.length > 4_096) throw Object.assign(new Error("The Google sign-in session is invalid."), { statusCode: 401 });
     const response = await this.#fetch(`${this.#supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
       headers: { apikey: this.#anonKey, "content-type": "application/json" },

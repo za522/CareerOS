@@ -31,7 +31,11 @@ describe("hosted browser sessions", () => {
       NODE_ENV: "production", CAREEROS_HOSTED: "1", CAREEROS_SESSION_ENCRYPTION_KEY: keyValue,
       SUPABASE_URL: "https://example.supabase.co", SUPABASE_ANON_KEY: "anon-key",
     }, fetch: fetchMock as typeof fetch });
-    const session = await service.rotate("original-refresh-token-value");
+    const session = await service.rotate("short-token");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/auth/v1/token?grant_type=refresh_token",
+      expect.objectContaining({ body: JSON.stringify({ refresh_token: "short-token" }) }),
+    );
     expect(session.access_token).toBe("access-token-value");
     expect(service.publicSession(session)).not.toHaveProperty("refresh_token");
     const cookie = service.cookie(session, true);

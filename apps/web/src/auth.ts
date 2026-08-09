@@ -68,6 +68,10 @@ async function exchangeServerSession(refreshToken: string) {
     method: "POST", credentials: "include", headers: { "content-type": "application/json" },
     body: JSON.stringify({ refreshToken }),
   });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error ?? "CareerOS could not secure the Google sign-in session.");
+  }
   const session = await sessionResponse(response);
   if (!session) throw new Error("CareerOS could not secure the Google sign-in session.");
   setCurrentSession(session);
@@ -117,9 +121,6 @@ export async function loadAuthConfig(): Promise<AuthConfig> {
     );
     if (callbackSession?.refresh_token) await exchangeServerSession(callbackSession.refresh_token);
     else await refreshServerSession().catch(() => null);
-    client.auth.onAuthStateChange((_event, next) => {
-      if (next?.refresh_token && next.access_token !== currentSession?.access_token) void exchangeServerSession(next.refresh_token).catch(() => setCurrentSession(null));
-    });
   }
   return config;
 }
