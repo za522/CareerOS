@@ -124,6 +124,18 @@ export class PostgresCloudDataProvider implements CloudDataProvider {
       await client.query("CREATE SCHEMA IF NOT EXISTS careeros");
       await client.query("CREATE TABLE IF NOT EXISTS careeros.schema_migrations (version text PRIMARY KEY, checksum text NOT NULL DEFAULT '', applied_at timestamptz NOT NULL DEFAULT now())");
       await client.query("ALTER TABLE careeros.schema_migrations ADD COLUMN IF NOT EXISTS checksum text NOT NULL DEFAULT ''");
+      // Older migrations forced RLS onto their owner. That makes their own
+      // SECURITY DEFINER policy helpers recurse during later DDL validation.
+      await client.query(`DO $$
+        DECLARE table_name text;
+        BEGIN
+          FOR table_name IN
+            SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relforcerowsecurity
+          LOOP
+            EXECUTE format('ALTER TABLE public.%I NO FORCE ROW LEVEL SECURITY', table_name);
+          END LOOP;
+        END $$`);
       for (const migration of migrations) {
         const existing = await client.query<{ checksum: string }>("SELECT checksum FROM careeros.schema_migrations WHERE version=$1", [migration.version]);
         if (existing.rows[0]) {

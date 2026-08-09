@@ -108,7 +108,7 @@ describe("PostgreSQL cloud foundation migration", () => {
     expect(sql).toContain("'workspace_comments','audit_events'");
   });
 
-  it("covers every persistent SQLite table and forces workspace RLS", async () => {
+  it("covers every persistent SQLite table and enables workspace RLS for the runtime role", async () => {
     const database = new PGlite();
     await applyAll(database);
     const expectedTables = [
@@ -131,7 +131,7 @@ describe("PostgreSQL cloud foundation migration", () => {
     for (const table of expectedTables) {
       expect(byName.has(table), `${table} exists`).toBe(true);
       expect(byName.get(table)?.rowsecurity, `${table} RLS enabled`).toBe(true);
-      expect(byName.get(table)?.forcerowsecurity, `${table} RLS forced`).toBe(true);
+      expect(byName.get(table)?.forcerowsecurity, `${table} does not force RLS onto the administrative owner`).toBe(false);
     }
     const migrations = await database.query<{ version: string; checksum: string }>("SELECT version,checksum FROM careeros.schema_migrations ORDER BY version");
     expect(migrations.rows.map((row) => row.version)).toEqual([
@@ -148,6 +148,7 @@ describe("PostgreSQL cloud foundation migration", () => {
       "0011_discovery_backoff",
       "0012_document_version_immutability",
       "0013_document_version_pdf_atomicity",
+      "0014_runtime_owner_rls_boundary",
     ]);
     expect(migrations.rows.every((row) => /^[a-f0-9]{64}$/.test(row.checksum))).toBe(true);
     await database.close();
@@ -209,6 +210,7 @@ describe("PostgreSQL cloud foundation migration", () => {
       "0011_discovery_backoff",
       "0012_document_version_immutability",
       "0013_document_version_pdf_atomicity",
+      "0014_runtime_owner_rls_boundary",
     ]);
     await database.close();
   });

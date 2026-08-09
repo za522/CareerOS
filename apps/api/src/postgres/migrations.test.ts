@@ -45,6 +45,7 @@ describe("ordered cloud migration discovery", () => {
       "0011_discovery_backoff",
       "0012_document_version_immutability",
       "0013_document_version_pdf_atomicity",
+      "0014_runtime_owner_rls_boundary",
     ]);
     expect(new Set(migrations.map((migration) => migration.checksum)).size).toBe(migrations.length);
   });
