@@ -20,6 +20,31 @@ export function createPkceOnlyStorage(storage: BrowserStorage) {
   };
 }
 
+export async function exchangeOAuthCallback(
+  authClient: SupabaseClient,
+  href: string,
+  replaceUrl: (url: string) => void,
+) {
+  const url = new URL(href);
+  const code = url.searchParams.get("code");
+  const providerError = url.searchParams.get("error_description") ?? url.searchParams.get("error");
+  if (!code && !providerError) return null;
+
+  for (const parameter of ["code", "error", "error_code", "error_description"]) url.searchParams.delete(parameter);
+  const cleanUrl = `${url.pathname}${url.search}${url.hash}`;
+
+  if (providerError) {
+    replaceUrl(cleanUrl);
+    throw new Error(providerError);
+  }
+
+  const { data, error } = await authClient.auth.exchangeCodeForSession(code!);
+  replaceUrl(cleanUrl);
+  if (error) throw new Error(`Google sign-in could not be completed: ${error.message}`);
+  if (!data.session?.refresh_token) throw new Error("Google sign-in returned an incomplete session. Please try again.");
+  return data.session;
+}
+
 function setCurrentSession(session: Session | null) {
   currentSession = session;
   if (refreshTimer !== null) window.clearTimeout(refreshTimer);
@@ -81,12 +106,16 @@ export async function loadAuthConfig(): Promise<AuthConfig> {
         persistSession: true,
         storage: createPkceOnlyStorage(window.sessionStorage),
         autoRefreshToken: false,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: "pkce",
       },
     });
-    const session = await client.auth.getSession();
-    if (session.data.session?.refresh_token) await exchangeServerSession(session.data.session.refresh_token);
+    const callbackSession = await exchangeOAuthCallback(
+      client,
+      window.location.href,
+      (url) => window.history.replaceState({}, "", url),
+    );
+    if (callbackSession?.refresh_token) await exchangeServerSession(callbackSession.refresh_token);
     else await refreshServerSession().catch(() => null);
     client.auth.onAuthStateChange((_event, next) => {
       if (next?.refresh_token && next.access_token !== currentSession?.access_token) void exchangeServerSession(next.refresh_token).catch(() => setCurrentSession(null));

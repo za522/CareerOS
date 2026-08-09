@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { createPkceOnlyStorage } from "./auth";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { describe, expect, it, vi } from "vitest";
+import { createPkceOnlyStorage, exchangeOAuthCallback } from "./auth";
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -34,5 +35,37 @@ describe("hosted PKCE browser storage", () => {
     storage.removeItem("sb-project-code-verifier");
     expect(backing.values.get("unrelated")).toBe("keep");
     expect(backing.values.has("sb-project-code-verifier")).toBe(false);
+  });
+});
+
+describe("hosted OAuth callback", () => {
+  it("explicitly exchanges the one-time code before removing it from the address bar", async () => {
+    const session = { access_token: "access", refresh_token: "refresh-token-value" } as Session;
+    const exchangeCodeForSession = vi.fn().mockResolvedValue({ data: { session }, error: null });
+    const replaceUrl = vi.fn();
+    const authClient = { auth: { exchangeCodeForSession } } as unknown as SupabaseClient;
+
+    await expect(exchangeOAuthCallback(
+      authClient,
+      "https://careeros.example/?view=tracker&code=one-time-code",
+      replaceUrl,
+    )).resolves.toBe(session);
+
+    expect(exchangeCodeForSession).toHaveBeenCalledWith("one-time-code");
+    expect(replaceUrl).toHaveBeenCalledWith("/?view=tracker");
+  });
+
+  it("surfaces provider errors and removes sensitive callback parameters", async () => {
+    const replaceUrl = vi.fn();
+    const authClient = { auth: { exchangeCodeForSession: vi.fn() } } as unknown as SupabaseClient;
+
+    await expect(exchangeOAuthCallback(
+      authClient,
+      "https://careeros.example/?error=access_denied&error_description=Access+denied",
+      replaceUrl,
+    )).rejects.toThrow("Access denied");
+
+    expect(replaceUrl).toHaveBeenCalledWith("/");
+    expect(authClient.auth.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 });
