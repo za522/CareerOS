@@ -276,7 +276,11 @@ test("flushes the current CV draft before switching imported documents", async (
   await expect(selector).toHaveValue(secondDocumentId);
   await selector.selectOption(firstDocumentId);
   await expect(selector).toHaveValue(firstDocumentId);
-  await expect(page.getByRole("textbox", { name: "CV name", exact: true })).toHaveValue("Pending Switch Name");
+  await expect(page.getByRole("textbox", { name: "CV name", exact: true })).toHaveText("Pending Switch Name");
+  await expect.poll(async () => {
+    const persisted = await studioWorkspace(request, jobId);
+    return persisted.documents.find((item: any) => item.document.id === firstDocumentId)?.draftContent?.name;
+  }).toBe("Pending Switch Name");
 });
 
 test("coalesces rapid rich-text input into a bounded autosave request", async ({ page, request }) => {
