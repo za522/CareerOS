@@ -690,23 +690,28 @@ test("Discover searches beyond page one, manages alerts, reports partial failure
   await expect(page.locator(".discover-table-row:not(.discover-table-head)")).toHaveCount(100);
   await page.getByRole("button", { name: "Load more roles" }).click();
   await expect(page.locator(".discover-table-row:not(.discover-table-head)")).toHaveCount(120);
-  await page.getByPlaceholder("Search every discovered role...").fill("Needle Capital");
+  await page.getByPlaceholder("Search company, role or location").fill("Needle Capital");
   await expect(page.locator(".discover-table-row:not(.discover-table-head)")).toHaveCount(1);
   await expect(page.getByText("Quantitative Research Intern", { exact: true })).toBeVisible();
+  await page.getByText("More filters", { exact: true }).click();
   await page.getByLabel("Role family").selectOption("Quantitative research");
   await page.getByLabel("Career track").selectOption("Quantitative finance");
   await expect(page.getByText("1 matches")).toBeVisible();
   await expect(page.getByRole("link", { name: /Open Quantitative Research Intern/ })).toHaveAttribute("href", "https://jobs.example/115?apply=1");
+  await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Alerts" }).click();
   await page.getByLabel("Name").fill("London quant alerts");
   await page.getByRole("button", { name: "Save alert" }).click();
+  await page.getByRole("button", { name: "Alerts" }).click();
   await expect(page.getByText("London quant alerts", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit London quant alerts" }).click();
   await page.getByLabel("Name").fill("Edited quant alerts");
   await page.getByLabel("Locations").fill("New York");
   await page.getByRole("button", { name: "Update alert" }).click();
+  await page.getByRole("button", { name: "Alerts" }).click();
   await expect(page.getByText("Edited quant alerts", { exact: true })).toBeVisible();
   await expect(page.locator(".alert-rule-row", { hasText: "Edited quant alerts" })).toContainText("New York");
+  await page.getByRole("button", { name: "Sources" }).click();
   await expect(page.locator(".source-monitor-row", { hasText: "Broken source" })).toContainText("Needs attention");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -729,9 +734,10 @@ test("Discover uses the real Fastify and SQLite path and preserves loaded pages 
 
   await page.clock.fastForward(60_100);
   await expect(page.locator(".discover-table-row:not(.discover-table-head)")).toHaveCount(120);
-  await expect(page.getByPlaceholder("Search every discovered role...")).toHaveValue("");
+  await expect(page.getByPlaceholder("Search company, role or location")).toHaveValue("");
 
-  await page.getByPlaceholder("Search every discovered role...").fill("E2E Capital");
+  await page.getByPlaceholder("Search company, role or location").fill("E2E Capital");
+  await page.getByText("More filters", { exact: true }).click();
   await page.getByLabel("Career track").selectOption("Technology");
   await page.getByLabel("Programme").selectOption("Placement");
   await expect(page.locator(".discover-table-row:not(.discover-table-head)")).toHaveCount(1);
@@ -780,7 +786,9 @@ test("queues 20 rapid captures plus a blocked URL without losing the composer", 
   const saveValid = page.getByRole("button", { name: /Save \d+ ready/ });
   await expect(saveValid).toBeVisible({ timeout: 20_000 });
   await saveValid.click();
-  await expect(page.locator(".capture-state", { hasText: "Saved" }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(".capture-state", { hasText: "Saved" })).toHaveCount(0, { timeout: 15_000 });
+  await page.getByRole("button", { name: /Opportunities/ }).click();
+  await expect(page.getByText("Quant Trading Analyst 1", { exact: true })).toBeVisible({ timeout: 15_000 });
 });
 
 test("recovers an unsent capture after navigation and refresh without browser storage", async ({ page }) => {

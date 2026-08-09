@@ -145,11 +145,11 @@ describe("PostgreSQL Fastify lifecycle", () => {
   it("seeds hosted discovery and reports never-successful and overdue sources as unhealthy", async () => {
     const seeded = await app.inject({ method: "GET", url: "/api/discovery?limit=100", headers: authorization });
     expect(seeded.statusCode).toBe(200);
-    expect(seeded.json().sources).toHaveLength(6);
-    expect(seeded.json().sources.every((source: { kind: string }) => source.kind === "greenhouse" || source.kind === "lever")).toBe(true);
+    expect(seeded.json().sources.length).toBeGreaterThan(20);
+    expect(seeded.json().sources.every((source: { kind: string }) => ["greenhouse", "lever", "ashby"].includes(source.kind))).toBe(true);
 
     const neverSuccessful = await app.inject({ method: "GET", url: "/api/system/health", headers: authorization });
-    expect(neverSuccessful.json().discovery).toMatchObject({ enabledSources: 6, unhealthySources: 6, lastSuccessfulAt: null });
+    expect(neverSuccessful.json().discovery).toMatchObject({ enabledSources: seeded.json().sources.length, unhealthySources: seeded.json().sources.length, lastSuccessfulAt: null });
 
     await provider.administrativeTransaction(async (tx) => {
       await tx.query("UPDATE discovery_sources SET last_checked_at=now(),last_successful_at=now(),last_error='' WHERE workspace_id=$1", ["00000000-0000-4000-8000-000000000001"]);
@@ -198,6 +198,11 @@ describe("PostgreSQL Fastify lifecycle", () => {
     expect((review.fieldEvidence as unknown) ?? review.draft).toBeTruthy();
     const committed = await app.inject({ method: "POST", url: `/api/capture-queue/${id}/commit`, headers: authorization, payload: { draft: review.draft } });
     expect(committed.statusCode).toBe(201);
+    const activeQueue = await app.inject({ method: "GET", url: "/api/capture-queue?includeSaved=false", headers: authorization });
+    expect(activeQueue.statusCode).toBe(200);
+    expect(activeQueue.json().items.some((item: { id: string }) => item.id === id)).toBe(false);
+    const queueHistory = await app.inject({ method: "GET", url: "/api/capture-queue", headers: authorization });
+    expect(queueHistory.json().items.some((item: { id: string }) => item.id === id)).toBe(true);
 
     const duplicateQueue = await app.inject({ method: "POST", url: "/api/capture-queue", headers: authorization, payload });
     const duplicateId = duplicateQueue.json()[0].id as string;
@@ -270,10 +275,16 @@ describe("PostgreSQL Fastify lifecycle", () => {
       (id,workspace_id,source_id,external_id,canonical_url,apply_url,company_name,title,location,programme,sector,firm_type,role_family,work_mode,sponsorship,side,description,first_seen_at,last_seen_at,last_checked_at,availability,content_hash)
       VALUES($1,'00000000-0000-4000-8000-000000000001',$2,'role-1','https://example.com/quant-role','https://example.com/quant-role','Lifecycle Markets','Quant Trading Graduate','London','Graduate','Financial services','Bank','Trading','Hybrid','Not stated','sell_side','Quant trading role',now(),now(),now(),'Open','hash')`,
     [postingId, source.json().id]);
+    await database.query(`INSERT INTO discovered_postings
+      (id,workspace_id,source_id,external_id,canonical_url,apply_url,company_name,title,location,programme,sector,firm_type,role_family,work_mode,sponsorship,side,description,first_seen_at,last_seen_at,last_checked_at,availability,content_hash)
+      VALUES('71000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001',$1,'role-spring','https://example.com/spring-role','https://example.com/spring-role','Lifecycle Markets','Markets Spring Week','London','Spring week','Financial services','Bank','Trading','On-site','No','sell_side','Spring insight programme',now(),now(),now(),'Open','spring-hash')`,
+    [source.json().id]);
 
     const feed = await app.inject({ method: "GET", url: "/api/discovery?q=quant&roleFamily=Trading&location=London", headers: authorization });
     expect(feed.statusCode).toBe(200);
     expect(feed.json()).toMatchObject({ postingTotal: 1, postings: [{ id: postingId, title: "Quant Trading Graduate" }] });
+    const earlyCareer = await app.inject({ method: "GET", url: "/api/discovery?earlyCareerOnly=true", headers: authorization });
+    expect(earlyCareer.json()).toMatchObject({ postingTotal: 1, openPostingTotal: 1, postings: [{ id: postingId }] });
     const hidden = await app.inject({ method: "PATCH", url: `/api/discovery/postings/${postingId}/hidden`, headers: authorization, payload: { hidden: true } });
     expect(hidden.statusCode).toBe(200);
     expect((await app.inject({ method: "GET", url: "/api/discovery?q=quant", headers: authorization })).json().postingTotal).toBe(0);

@@ -125,6 +125,7 @@ export class PostgresDiscoveryQueryRepository {
       }
       const exact = (column: string, value?: string) => { if (value) add(`${column}=?`, value); };
       exact("side", query.side); exact("programme", query.programme); exact("sector", query.sector); exact("firm_type", query.firmType);
+      if (query.earlyCareerOnly) where.push("programme IN ('Graduate','Internship','Off-cycle','Placement','Entry-level')");
       exact("role_family", query.roleFamily); exact("work_mode", query.workMode); exact("sponsorship", query.sponsorship);
       if (query.careerTrack) add(`${careerTrackSql()}=?`, query.careerTrack);
       if (query.location) add("location ILIKE '%'||?||'%'", query.location);
@@ -134,7 +135,7 @@ export class PostgresDiscoveryQueryRepository {
       if (query.deadlineSoon) where.push("deadline_at>now() AND deadline_at<=now()+interval '7 days'");
       const countWhere = where.join(" AND ");
       const totals = await tx.query<{ total: number }>(`SELECT count(*)::int AS total FROM discovered_postings WHERE ${countWhere}`, values);
-      const open = await tx.query<{ total: number }>("SELECT count(*)::int AS total FROM discovered_postings WHERE workspace_id=$1 AND deleted_at IS NULL AND hidden_at IS NULL AND availability='Open'", [context.workspaceId]);
+      const open = await tx.query<{ total: number }>(`SELECT count(*)::int AS total FROM discovered_postings WHERE ${countWhere} AND availability='Open'`, values);
       const paging = cursor(query.cursor);
       if (paging) {
         values.push(paging.timestamp, paging.id);

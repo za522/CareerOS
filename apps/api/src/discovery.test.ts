@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   matchAlertRules,
   normalizeRole,
+  parseAshbyResponse,
   parseGreenhouseResponse,
   parseLeverResponse,
   reconcileDiscoveryRun,
@@ -81,6 +82,19 @@ describe("public provider parsers", () => {
       externalId: "lever-7", title: "Design Engineer", location: "London",
       team: "Hardware", employmentType: "Permanent", postedAt: "2026-06-05T09:30:00.000Z",
     });
+  });
+
+  it("parses listed Ashby jobs and their direct application links", () => {
+    const roles = parseAshbyResponse({ jobs: [{
+      id: "ashby-1", title: "Quantitative Analyst Intern", location: "London", department: "Research",
+      employmentType: "FullTime", publishedAt: "2026-08-08T09:30:00Z", isListed: true,
+      jobUrl: "https://jobs.ashbyhq.com/example/ashby-1", applyUrl: "https://jobs.ashbyhq.com/example/ashby-1/application",
+      descriptionPlain: "Recent graduates may apply.",
+    }, {
+      id: "hidden", title: "Hidden role", isListed: false, jobUrl: "https://jobs.ashbyhq.com/example/hidden",
+    }] });
+    expect(roles).toHaveLength(1);
+    expect(roles[0]).toMatchObject({ externalId: "ashby-1", title: "Quantitative Analyst Intern", location: "London", team: "Research", postedAt: "2026-08-08T09:30:00.000Z" });
   });
 
   it("rejects malformed or non-HTTP provider links before persistence", () => {

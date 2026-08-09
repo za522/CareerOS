@@ -101,15 +101,15 @@ describe("hosted PostgreSQL discovery and alert vertical slice", () => {
     const firstA = await repository.ensureStarterSources(contextA);
     const secondA = await repository.ensureStarterSources(contextA);
     const firstB = await repository.ensureStarterSources(contextB);
-    expect(firstA).toHaveLength(6);
+    expect(firstA.length).toBeGreaterThan(20);
     expect(secondA.map((source) => source.id)).toEqual(firstA.map((source) => source.id));
-    expect(firstB).toHaveLength(6);
-    expect(firstA.every((source) => source.kind === "greenhouse" || source.kind === "lever")).toBe(true);
+    expect(firstB).toHaveLength(firstA.length);
+    expect(firstA.every((source) => source.kind === "greenhouse" || source.kind === "lever" || source.kind === "ashby")).toBe(true);
     expect(firstA.some((source) => /optiver/i.test(source.name))).toBe(false);
-    expect(new Set([...firstA, ...firstB].map((source) => source.id)).size).toBe(12);
+    expect(new Set([...firstA, ...firstB].map((source) => source.id)).size).toBe(firstA.length * 2);
     expect((await database.query<{ workspace_id: string; count: number }>(
       "SELECT workspace_id,count(*)::int AS count FROM discovery_sources GROUP BY workspace_id ORDER BY workspace_id",
-    )).rows).toEqual([{ workspace_id: WORKSPACE_A, count: 6 }, { workspace_id: WORKSPACE_B, count: 6 }]);
+    )).rows).toEqual([{ workspace_id: WORKSPACE_A, count: firstA.length }, { workspace_id: WORKSPACE_B, count: firstA.length }]);
   });
 
   it("persists Running before fetch and records an abandoned lease before reclaiming it", async () => {

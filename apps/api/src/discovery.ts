@@ -1,4 +1,4 @@
-export type DiscoveryProvider = "greenhouse" | "lever" | (string & {});
+export type DiscoveryProvider = "greenhouse" | "lever" | "ashby" | (string & {});
 
 export type SourceAdapter<TResponse = unknown> = {
   sourceId: string;
@@ -221,6 +221,33 @@ export function parseLeverResponse(response: unknown): SourceRole[] {
       updatedAt: isoDate(job.updatedAt),
       deadlineAt: deadlineFrom(job.deadline ?? job.applicationDeadline ?? job.closesAt, optionalString(job.descriptionPlain)),
     };
+  });
+}
+
+/** Parse Ashby's public job-board response (`{ jobs: [...] }`). */
+export function parseAshbyResponse(response: unknown): SourceRole[] {
+  const root = object(response, "Ashby response");
+  return array(root.jobs, "Ashby jobs").flatMap((value, index) => {
+    const job = object(value, `Ashby job ${index}`);
+    if (job.isListed === false) return [];
+    const sourceUrl = publicHttpUrl(job.jobUrl, `Ashby job ${index} jobUrl`);
+    const applyUrl = optionalString(job.applyUrl);
+    const secondaryLocations = Array.isArray(job.secondaryLocations)
+      ? job.secondaryLocations.map((location) => typeof location === "string" ? location : nestedString(location, "location")).filter((location): location is string => Boolean(location))
+      : [];
+    return [{
+      externalId: requiredString(job.id, `Ashby job ${index} id`),
+      title: requiredString(job.title, `Ashby job ${index} title`),
+      location: [optionalString(job.location), ...secondaryLocations].filter(Boolean).join("; ") || undefined,
+      team: [optionalString(job.department), optionalString(job.team)].filter(Boolean).join(", ") || undefined,
+      employmentType: optionalString(job.employmentType),
+      description: optionalString(job.descriptionPlain),
+      sourceUrl,
+      applyUrl: applyUrl ? publicHttpUrl(applyUrl, `Ashby job ${index} applyUrl`) : sourceUrl,
+      postedAt: isoDate(job.publishedAt),
+      updatedAt: null,
+      deadlineAt: deadlineFrom(job.deadlineAt, optionalString(job.descriptionPlain)),
+    }];
   });
 }
 

@@ -41,7 +41,7 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
   const [workspace, setWorkspace] = useState<DiscoveryWorkspace | null>(null);
   const [search, setSearch] = useState("");
   const [sideFilter, setSideFilter] = useState("all");
-  const [programmeFilter, setProgrammeFilter] = useState("all");
+  const [programmeFilter, setProgrammeFilter] = useState("early-career");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [firmTypeFilter, setFirmTypeFilter] = useState("all");
   const [roleFamilyFilter, setRoleFamilyFilter] = useState("all");
@@ -89,7 +89,7 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
   };
 
   const clearFilters = () => {
-    setSearch(""); setSideFilter("all"); setProgrammeFilter("all"); setSectorFilter("all"); setFirmTypeFilter("all");
+    setSearch(""); setSideFilter("all"); setProgrammeFilter("early-career"); setSectorFilter("all"); setFirmTypeFilter("all");
     setRoleFamilyFilter("all"); setCareerTrackFilter("all"); setWorkModeFilter("all"); setSponsorshipFilter("all");
     setTrackedFilter("all"); setLocationFilter(""); setFreshOnly(false); setDeadlineSoon(false); setShowHidden(false);
   };
@@ -101,7 +101,8 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
 
   const queryParams = (cursor?: string) => ({
     ...(cursor ? { cursor } : {}), limit: "100", ...(search.trim() ? { q: search.trim() } : {}),
-    ...(sideFilter !== "all" ? { side: sideFilter } : {}), ...(programmeFilter !== "all" ? { programme: programmeFilter } : {}),
+    ...(sideFilter !== "all" ? { side: sideFilter } : {}),
+    ...(programmeFilter === "early-career" ? { earlyCareerOnly: "true" } : programmeFilter !== "all" ? { programme: programmeFilter } : {}),
     ...(locationFilter.trim() ? { location: locationFilter.trim() } : {}), ...(sectorFilter !== "all" ? { sector: sectorFilter } : {}),
     ...(firmTypeFilter !== "all" ? { firmType: firmTypeFilter } : {}), ...(roleFamilyFilter !== "all" ? { roleFamily: roleFamilyFilter } : {}),
     ...(careerTrackFilter !== "all" ? { careerTrack: careerTrackFilter } : {}),
@@ -321,9 +322,9 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
     {!readOnly && settingsOpen && (sourceOpen || ruleOpen || telegramOpen) && <section className="discover-setup-band">
       {sourceOpen && <div className="discover-setup-form"><header><Building2 size={16} /><strong>Add an approved public source</strong></header><div className="discover-form-grid">
         <label><span>Company</span><input value={source.companyName} onChange={(event) => setSource({ ...source, companyName: event.target.value, name: event.target.value ? `${event.target.value} careers` : "" })} /></label>
-        <label><span>Provider</span><select value={source.kind} onChange={(event) => setSource({ ...source, kind: event.target.value as DiscoverySourceCreateInput["kind"] })}><option value="greenhouse">Greenhouse</option><option value="lever">Lever</option></select></label>
-        <label className="wide"><span>Public API URL</span><input value={source.sourceUrl} onChange={(event) => setSource({ ...source, sourceUrl: event.target.value })} placeholder={source.kind === "greenhouse" ? "https://boards-api.greenhouse.io/v1/boards/company/jobs?content=true" : "https://api.lever.co/v0/postings/company?mode=json"} /></label>
-      </div><footer><small>Only official public Greenhouse and Lever feeds are accepted.</small><button className="primary-button" disabled={busy === "source"} onClick={() => void saveSource()}><Check size={14} /> Save source</button></footer></div>}
+        <label><span>Provider</span><select value={source.kind} onChange={(event) => setSource({ ...source, kind: event.target.value as DiscoverySourceCreateInput["kind"] })}><option value="greenhouse">Greenhouse</option><option value="lever">Lever</option><option value="ashby">Ashby</option></select></label>
+        <label className="wide"><span>Public API URL</span><input value={source.sourceUrl} onChange={(event) => setSource({ ...source, sourceUrl: event.target.value })} placeholder={source.kind === "greenhouse" ? "https://boards-api.greenhouse.io/v1/boards/company/jobs?content=true" : source.kind === "lever" ? "https://api.lever.co/v0/postings/company?mode=json" : "https://api.ashbyhq.com/posting-api/job-board/company"} /></label>
+      </div><footer><small>Official public Greenhouse, Lever and Ashby feeds are accepted.</small><button className="primary-button" disabled={busy === "source"} onClick={() => void saveSource()}><Check size={14} /> Save source</button></footer></div>}
       {ruleOpen && <div className="discover-setup-form"><header><BellRing size={16} /><strong>{editingRuleId ? "Edit alert" : "New-role alert"}</strong></header><div className="discover-form-grid">
         <label><span>Name</span><input value={rule.name} onChange={(event) => setRule({ ...rule, name: event.target.value })} /></label>
         <label><span>Side</span><select value={rule.side} onChange={(event) => setRule({ ...rule, side: event.target.value as AlertRuleCreateInput["side"] })}><option value="either">Buy or sell side</option><option value="buy_side">Buy side</option><option value="sell_side">Sell side</option></select></label>
@@ -353,6 +354,7 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
     <section className="discover-toolbar"><label><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search company, role or location" /></label><span>{workspace?.postingTotal ?? 0} matches</span></section>
     <section className="discover-quick-filters" aria-label="Quick filters">
       <button className={freshOnly ? "active" : ""} onClick={() => setFreshOnly((value) => !value)}>New 24h</button>
+      <button className={programmeFilter === "early-career" ? "active" : ""} onClick={() => setProgrammeFilter(programmeFilter === "early-career" ? "all" : "early-career")}>Early career</button>
       <button className={programmeFilter === "Graduate" ? "active" : ""} onClick={() => setProgrammeFilter(programmeFilter === "Graduate" ? "all" : "Graduate")}>Graduate</button>
       <button className={programmeFilter === "Internship" ? "active" : ""} onClick={() => setProgrammeFilter(programmeFilter === "Internship" ? "all" : "Internship")}>Internship</button>
       <button className={locationFilter === "London" ? "active" : ""} onClick={() => setLocationFilter(locationFilter === "London" ? "" : "London")}>London</button>
@@ -362,7 +364,7 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
     </section>
     <details className="discover-advanced"><summary><Settings2 size={14} /> More filters</summary><section className="discover-filters" aria-label="Discovery filters">
       <select aria-label="Buy or sell side" value={sideFilter} onChange={(event) => setSideFilter(event.target.value)}><option value="all">All sides</option><option value="buy_side">Buy side</option><option value="sell_side">Sell side</option><option value="unknown">Not classified</option></select>
-      <select aria-label="Programme" value={programmeFilter} onChange={(event) => setProgrammeFilter(event.target.value)}><option value="all">All programmes</option><option>Graduate</option><option>Internship</option><option>Off-cycle</option><option>Spring week</option><option>Placement</option><option>Entry-level</option></select>
+      <select aria-label="Programme" value={programmeFilter} onChange={(event) => setProgrammeFilter(event.target.value)}><option value="early-career">Graduate, internship and placement</option><option value="all">All programmes</option><option>Graduate</option><option>Internship</option><option>Off-cycle</option><option>Placement</option><option>Entry-level</option><option>Spring week</option></select>
       <input aria-label="Location filter" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} placeholder="Any location" />
       <select aria-label="Sector" value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)}><option value="all">All sectors</option><option>Financial services</option><option>Technology</option><option>Risk, finance &amp; legal</option></select>
       <select aria-label="Firm type" value={firmTypeFilter} onChange={(event) => setFirmTypeFilter(event.target.value)}><option value="all">All firm types</option><option>Market maker / proprietary trading</option><option>Hedge fund</option><option>Asset manager</option><option>Private equity</option><option>Investment bank</option><option>Financial services</option></select>

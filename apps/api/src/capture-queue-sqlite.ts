@@ -152,7 +152,7 @@ export class SqliteCaptureQueueStore implements CaptureQueueStore {
     }
   }
 
-  async listPage(options: { limit: number; cursor?: string; state?: CaptureQueueStatus }) {
+  async listPage(options: { limit: number; cursor?: string; state?: CaptureQueueStatus; excludeSaved?: boolean }) {
     let cursor: { createdAt: string; id: string } | null = null;
     if (options.cursor) {
       try { cursor = JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8")) as { createdAt: string; id: string }; }
@@ -161,6 +161,7 @@ export class SqliteCaptureQueueStore implements CaptureQueueStore {
     const where = ["deleted_at IS NULL"];
     const values: unknown[] = [];
     if (options.state) { where.push("state = ?"); values.push(options.state); }
+    else if (options.excludeSaved) where.push("state <> 'Saved'");
     if (cursor?.createdAt && cursor.id) {
       where.push("(created_at < ? OR (created_at = ? AND id < ?))");
       values.push(cursor.createdAt, cursor.createdAt, cursor.id);

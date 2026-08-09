@@ -157,7 +157,7 @@ export class PostgresDiscoveryRepository {
 
   async ensureStarterSources(context: WorkspaceContext): Promise<DiscoverySourceRecord[]> {
     return this.transactions.transaction(context, async (tx) => {
-      for (const input of financeStarterSources.filter((source) => source.kind === "greenhouse" || source.kind === "lever")) {
+      for (const input of financeStarterSources.filter((source) => source.kind === "greenhouse" || source.kind === "lever" || source.kind === "ashby")) {
         await tx.query(`INSERT INTO discovery_sources
           (id,workspace_id,name,kind,company_name,source_url,external_key,enabled,check_interval_minutes)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)

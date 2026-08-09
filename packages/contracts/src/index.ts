@@ -67,7 +67,7 @@ export const captureDraftSaveSchema = z.object({
   expectedRevision: z.number().int().positive().optional(),
 });
 
-export const discoverySourceKinds = ["greenhouse", "lever", "optiver", "public_page"] as const;
+export const discoverySourceKinds = ["greenhouse", "lever", "ashby", "optiver", "public_page"] as const;
 export const discoveryAvailabilityStates = ["Open", "Removed", "Expired", "Blocked", "Unknown"] as const;
 
 export const discoverySourceCreateSchema = z.object({
@@ -99,6 +99,7 @@ export const discoveryQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
   side: z.enum(["buy_side", "sell_side", "unknown"]).optional(),
   programme: z.string().trim().max(100).optional(),
+  earlyCareerOnly: z.union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")]).optional(),
   careerTrack: z.string().trim().max(120).optional(),
   location: z.string().trim().max(180).optional(),
   sector: z.string().trim().max(120).optional(),
@@ -1064,7 +1065,7 @@ export type CareerOSClient = {
   exportDocumentVersionPdf: (versionId: string, input: DocumentVersionPdfExportInput) => Promise<DocumentVersionRecord>;
   createImport: (input: ImportInput) => Promise<ImportDraftResponse>;
   enqueueCaptures: (input: CaptureQueueBatchInput) => Promise<CaptureQueueItem[]>;
-  listCaptureQueue: (params?: { limit?: number; cursor?: string; state?: CaptureQueueState }) => Promise<{ items: CaptureQueueItem[]; summary: CaptureQueueSummary; nextCursor: string | null }>;
+  listCaptureQueue: (params?: { limit?: number; cursor?: string; state?: CaptureQueueState; includeSaved?: boolean }) => Promise<{ items: CaptureQueueItem[]; summary: CaptureQueueSummary; nextCursor: string | null }>;
   getCapture: (id: string) => Promise<CaptureQueueItem>;
   retryCapture: (id: string) => Promise<CaptureQueueItem>;
   cancelCapture: (id: string) => Promise<CaptureQueueItem>;

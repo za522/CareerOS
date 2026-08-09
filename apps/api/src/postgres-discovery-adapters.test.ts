@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { HostedDiscoveryClaim } from "./postgres-discovery-repository.js";
 import { createHostedAtsFetcher } from "./postgres-discovery-adapters.js";
 
-function claim(kind: "greenhouse" | "lever", sourceUrl: string): HostedDiscoveryClaim {
+function claim(kind: "greenhouse" | "lever" | "ashby", sourceUrl: string): HostedDiscoveryClaim {
   return {
     source: {
       id: "source-1", name: "Source", kind, companyName: "Example Capital", sourceUrl, externalKey: "example",
@@ -38,6 +38,17 @@ describe("hosted public ATS adapters", () => {
     }]), { status: 200, headers: { "content-type": "application/json" } }));
     const result = await createHostedAtsFetcher({ fetch })(claim("lever", "https://api.lever.co/v0/postings/example?mode=json"));
     expect(result.observations[0]).toMatchObject({ externalId: "lever-1", programme: "Internship", roleFamily: "Engineering" });
+  });
+
+  it("fetches and classifies an Ashby early-career inventory", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ jobs: [{
+      id: "ashby-1", title: "Investment Analyst", location: "London", department: "Investments",
+      employmentType: "FullTime", publishedAt: "2026-08-08T09:30:00Z", isListed: true,
+      jobUrl: "https://jobs.ashbyhq.com/example/ashby-1", applyUrl: "https://jobs.ashbyhq.com/example/ashby-1/application",
+      descriptionPlain: "This role is open to recent graduates and offers visa sponsorship.",
+    }] }), { status: 200, headers: { "content-type": "application/json" } }));
+    const result = await createHostedAtsFetcher({ fetch })(claim("ashby", "https://api.ashbyhq.com/posting-api/job-board/example"));
+    expect(result.observations[0]).toMatchObject({ externalId: "ashby-1", programme: "Entry-level", sponsorship: "Yes", location: "London" });
   });
 
   it("does not infer a senior programme from internship boilerplate", async () => {

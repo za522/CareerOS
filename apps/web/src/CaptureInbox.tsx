@@ -43,7 +43,7 @@ export function CaptureInbox({ onReview, onBatchSaved }: { onReview: (item: Capt
       let latestSummary = emptySummary;
       let remainingCursor: string | null = null;
       for (let page = 0; page < pageCount; page += 1) {
-        const next = await client.listCaptureQueue({ limit: 50, cursor });
+        const next = await client.listCaptureQueue({ limit: 50, cursor, includeSaved: false });
         combined.push(...next.items);
         latestSummary = next.summary;
         remainingCursor = next.nextCursor;
@@ -229,7 +229,7 @@ export function CaptureInbox({ onReview, onBatchSaved }: { onReview: (item: Capt
   const loadMore = async () => {
     if (!nextCursor) return;
     try {
-      const next = await client.listCaptureQueue({ cursor: nextCursor });
+      const next = await client.listCaptureQueue({ cursor: nextCursor, includeSaved: false });
       setItems((current) => [...new Map([...current, ...next.items].map((item) => [item.id, item])).values()]);
       setSummary(next.summary);
       setNextCursor(next.nextCursor);

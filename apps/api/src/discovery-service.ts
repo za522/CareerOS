@@ -16,6 +16,7 @@ import type {
   NotificationDeliveryRecord,
 } from "@careeros/contracts";
 import {
+  parseAshbyResponse,
   parseGreenhouseResponse,
   parseLeverResponse,
   reconcileDiscoveryRun,
@@ -38,6 +39,29 @@ export const financeStarterSources: DiscoverySourceCreateInput[] = [
   { name: "DV Trading careers", kind: "greenhouse", companyName: "DV Trading", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/dvtrading/jobs?content=true", externalKey: "dvtrading", enabled: true, checkIntervalMinutes: 180 },
   { name: "Wintermute careers", kind: "lever", companyName: "Wintermute", sourceUrl: "https://api.lever.co/v0/postings/wintermute-trading?mode=json", externalKey: "wintermute-trading", enabled: true, checkIntervalMinutes: 180 },
   { name: "Intropic careers", kind: "lever", companyName: "Intropic", sourceUrl: "https://api.lever.co/v0/postings/intropic?mode=json", externalKey: "intropic", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Man Group careers", kind: "greenhouse", companyName: "Man Group", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/mangroup/jobs?content=true", externalKey: "mangroup", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Flow Traders careers", kind: "greenhouse", companyName: "Flow Traders", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/flowtraders/jobs?content=true", externalKey: "flowtraders", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Jump Trading careers", kind: "greenhouse", companyName: "Jump Trading", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/jumptrading/jobs?content=true", externalKey: "jumptrading", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Virtu careers", kind: "greenhouse", companyName: "Virtu Financial", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/virtu/jobs?content=true", externalKey: "virtu", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Winton careers", kind: "greenhouse", companyName: "Winton", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/winton/jobs?content=true", externalKey: "winton", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Galaxy careers", kind: "greenhouse", companyName: "Galaxy", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/galaxy/jobs?content=true", externalKey: "galaxy", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Quantiq careers", kind: "greenhouse", companyName: "Quantiq", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/quantiq/jobs?content=true", externalKey: "quantiq", enabled: true, checkIntervalMinutes: 180 },
+  { name: "LionTree careers", kind: "greenhouse", companyName: "LionTree", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/liontree/jobs?content=true", externalKey: "liontree", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Cobblestone Energy careers", kind: "greenhouse", companyName: "Cobblestone Energy", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/cobblestoneenergy/jobs?content=true", externalKey: "cobblestoneenergy", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Elwood Technologies careers", kind: "greenhouse", companyName: "Elwood Technologies", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/elwoodtechnologies/jobs?content=true", externalKey: "elwoodtechnologies", enabled: true, checkIntervalMinutes: 180 },
+  { name: "3Red Partners careers", kind: "greenhouse", companyName: "3Red Partners", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/3redpartners/jobs?content=true", externalKey: "3redpartners", enabled: true, checkIntervalMinutes: 180 },
+  { name: "B2C2 careers", kind: "greenhouse", companyName: "B2C2", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/b2c2/jobs?content=true", externalKey: "b2c2", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Da Vinci careers", kind: "greenhouse", companyName: "Da Vinci", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/davinciderivatives/jobs?content=true", externalKey: "davinciderivatives", enabled: true, checkIntervalMinutes: 180 },
+  { name: "FT Partners careers", kind: "greenhouse", companyName: "FT Partners", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/financialtechnologypartners/jobs?content=true", externalKey: "financialtechnologypartners", enabled: true, checkIntervalMinutes: 180 },
+  { name: "FT Partners campus careers", kind: "greenhouse", companyName: "FT Partners", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/campusapps/jobs?content=true", externalKey: "campusapps", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Maven emerging talent", kind: "greenhouse", companyName: "Maven Securities", sourceUrl: "https://boards-api.greenhouse.io/v1/boards/emergingtalent/jobs?content=true", externalKey: "emergingtalent", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Teza Technologies careers", kind: "ashby", companyName: "Teza Technologies", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/teza-technologies", externalKey: "teza-technologies", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Keyrock careers", kind: "ashby", companyName: "Keyrock", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/keyrock", externalKey: "keyrock", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Trading 212 careers", kind: "ashby", companyName: "Trading 212", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/trading212", externalKey: "trading212", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Talos careers", kind: "ashby", companyName: "Talos", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/Talos-Trading", externalKey: "talos-trading", enabled: true, checkIntervalMinutes: 180 },
+  { name: "iwoca careers", kind: "ashby", companyName: "iwoca", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/iwoca.co.uk", externalKey: "iwoca", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Blockhouse careers", kind: "ashby", companyName: "Blockhouse", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/blockhouse", externalKey: "blockhouse", enabled: true, checkIntervalMinutes: 180 },
+  { name: "Polymarket careers", kind: "ashby", companyName: "Polymarket", sourceUrl: "https://api.ashbyhq.com/posting-api/job-board/polymarket", externalKey: "polymarket", enabled: true, checkIntervalMinutes: 180 },
 ];
 
 function text(row: Row, key: string): string {
@@ -213,14 +237,15 @@ function identityUrl(value: string) {
   }
 }
 
-function inferProgramme(title: string) {
-  const value = title.toLowerCase();
+function inferProgramme(title: string, employmentType = "", description = "") {
+  const value = `${title} ${employmentType}`.toLowerCase();
   if (/spring week|insight week/.test(value)) return "Spring week";
   if (/off[- ]?cycle/.test(value)) return "Off-cycle";
   if (/industrial placement|year in industry|sandwich year|placement (?:student|programme|year)|12[- ]month placement/.test(value)) return "Placement";
   if (/graduate|new grad|analyst programme/.test(value)) return "Graduate";
   if (/intern|summer/.test(value)) return "Internship";
   if (/entry[- ]level|junior|early career|analyst i\b|associate i\b/.test(value)) return "Entry-level";
+  if (/\brecent graduates?\b/i.test(description)) return "Entry-level";
   return "";
 }
 
@@ -313,8 +338,9 @@ function assertSourceUrl(source: DiscoverySourceRecord) {
   const host = url.hostname.toLowerCase();
   if (source.kind === "greenhouse" && host !== "boards-api.greenhouse.io") throw new Error("Greenhouse sources must use the public boards-api.greenhouse.io endpoint.");
   if (source.kind === "lever" && host !== "api.lever.co") throw new Error("Lever sources must use the public api.lever.co endpoint.");
+  if (source.kind === "ashby" && (host !== "api.ashbyhq.com" || !/^\/posting-api\/job-board\/[^/]+\/?$/.test(url.pathname))) throw new Error("Ashby sources must use the public api.ashbyhq.com job-board endpoint.");
   if (source.kind === "optiver" && (host !== "optiver.com" || url.pathname !== "/en/api/v1/jobs")) throw new Error("Optiver sources must use its approved official jobs endpoint.");
-  if (source.kind === "public_page") throw new Error("Public page monitoring is not enabled yet; add an approved Greenhouse or Lever source.");
+  if (source.kind === "public_page") throw new Error("Public page monitoring is not enabled yet; add an approved Greenhouse, Lever, or Ashby source.");
 }
 
 async function fetchSource(source: DiscoverySourceRecord): Promise<FetchedSourceResult> {
@@ -375,7 +401,8 @@ async function fetchSource(source: DiscoverySourceRecord): Promise<FetchedSource
       const raw = await response.text();
       if (raw.length > 5_000_000) throw new Error("Source response is too large.");
       const payload = JSON.parse(raw) as unknown;
-      const roles = source.kind === "greenhouse" ? parseGreenhouseResponse(payload) : parseLeverResponse(payload);
+      const roles = source.kind === "greenhouse" ? parseGreenhouseResponse(payload)
+        : source.kind === "lever" ? parseLeverResponse(payload) : parseAshbyResponse(payload);
       return { sourceId: source.id, provider: source.kind, organization: source.companyName, ok: true, roles, expectedCount: roles.length, inventoryComplete: true };
     } finally {
       clearTimeout(timeout);
@@ -561,6 +588,7 @@ export class DiscoveryService {
     }
     addExact("side", query.side);
     addExact("programme", query.programme);
+    if (query.earlyCareerOnly) where.push("programme IN ('Graduate','Internship','Off-cycle','Placement','Entry-level')");
     addExact("sector", query.sector);
     addExact("firm_type", query.firmType);
     addExact("role_family", query.roleFamily);
@@ -574,7 +602,7 @@ export class DiscoveryService {
     if (query.deadlineSoon) { where.push("deadline_at > ? AND deadline_at <= ?"); params.push(isoNow(), new Date(Date.now() + 7 * 86_400_000).toISOString()); }
     const countWhere = where.join(" AND ");
     const postingTotal = Number((this.sqlite.prepare(`SELECT COUNT(*) AS count FROM discovered_postings WHERE ${countWhere}`).get(...params) as Row).count ?? 0);
-    const openPostingTotal = Number((this.sqlite.prepare("SELECT COUNT(*) AS count FROM discovered_postings WHERE deleted_at IS NULL AND hidden_at IS NULL AND availability='Open'").get() as Row).count ?? 0);
+    const openPostingTotal = Number((this.sqlite.prepare(`SELECT COUNT(*) AS count FROM discovered_postings WHERE ${countWhere} AND availability='Open'`).get(...params) as Row).count ?? 0);
     const pageWhere = [...where];
     const pageParams = [...params];
     if (query.cursor) {
@@ -802,7 +830,7 @@ export class DiscoveryService {
             }
             const id = previous ? text(previous, "id") : randomUUID();
             const hash = role.status === "open" ? roleContentHash(role) : text(previous ?? {}, "alias_content_hash") || roleContentHash(role);
-            const programme = previous ? text(previous, "programme") : inferProgramme(role.title);
+            const programme = previous ? text(previous, "programme") : inferProgramme(role.title, role.employmentType, role.description);
             const side = previous ? text(previous, "side") : inferSide(source.companyName, role.title);
             const classifications = inferClassifications(source.companyName, role.title, role.description, role.team);
             const priorAvailability = previous ? text(previous, "alias_availability") || text(previous, "availability") : "";

@@ -87,9 +87,9 @@ describe("discovery service integration", () => {
   it("seeds the approved finance starter list exactly once", () => {
     const sqlite = database();
     const service = new DiscoveryService(sqlite);
-    expect(service.seedFinanceSources()).toHaveLength(7);
+    expect(service.seedFinanceSources().length).toBeGreaterThan(20);
     expect(service.seedFinanceSources()).toHaveLength(0);
-    expect(service.workspace().sources).toHaveLength(7);
+    expect(service.workspace().sources.length).toBeGreaterThan(20);
     sqlite.close();
   });
 

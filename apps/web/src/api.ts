@@ -121,11 +121,12 @@ export const client: CareerOSClient = {
   enqueueCaptures(input: CaptureQueueBatchInput) {
     return request<CaptureQueueItem[]>("/api/capture-queue", { method: "POST", body: JSON.stringify(input) });
   },
-  listCaptureQueue(params: { limit?: number; cursor?: string; state?: CaptureQueueItem["state"] } = {}) {
+  listCaptureQueue(params: { limit?: number; cursor?: string; state?: CaptureQueueItem["state"]; includeSaved?: boolean } = {}) {
     const query = new URLSearchParams();
     query.set("limit", String(params.limit ?? 50));
     if (params.cursor) query.set("cursor", params.cursor);
     if (params.state) query.set("state", params.state);
+    if (params.includeSaved === false) query.set("includeSaved", "false");
     return request<{ items: CaptureQueueItem[]; summary: CaptureQueueSummary; nextCursor: string | null }>(`/api/capture-queue?${query}`);
   },
   getCapture(id: string) {

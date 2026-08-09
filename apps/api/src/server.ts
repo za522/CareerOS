@@ -3179,18 +3179,21 @@ app.post("/api/capture-queue", async (request, reply) => {
 });
 
 app.get("/api/capture-queue", async (request) => {
-  const query = request.query as { limit?: string; cursor?: string; state?: string };
+  const query = request.query as { limit?: string; cursor?: string; state?: string; includeSaved?: string };
   const limit = Math.max(1, Math.min(Number(query.limit ?? 50) || 50, 100));
   const state = query.state && captureQueueStatuses.includes(query.state as never) ? query.state as CaptureQueueJob["status"] : undefined;
+  const excludeSaved = query.includeSaved === "false" && !state;
   if (postgresCaptureRepository) {
     const context = trackerContext(request);
-    const [page, queueSummary] = await Promise.all([postgresCaptureRepository.listPage(context, { limit, cursor: query.cursor, state }), postgresCaptureRepository.summary(context)]);
+    const [page, queueSummary] = await Promise.all([postgresCaptureRepository.listPage(context, { limit, cursor: query.cursor, state, excludeSaved }), postgresCaptureRepository.summary(context)]);
     const counts = Object.fromEntries(captureQueueStatuses.map((itemState) => [itemState, queueSummary.counts[itemState]])) as CaptureQueueSummary["counts"];
-    return { items: await Promise.all(page.jobs.map((job) => postgresQueueJobToRecord(context, job, true))), summary: { total: queueSummary.total, active: queueSummary.pending, counts }, nextCursor: page.nextCursor };
+    const visibleCounts = excludeSaved ? { ...counts, Saved: 0 } : counts;
+    return { items: await Promise.all(page.jobs.map((job) => postgresQueueJobToRecord(context, job, true))), summary: { total: excludeSaved ? queueSummary.total - counts.Saved : queueSummary.total, active: queueSummary.pending, counts: visibleCounts }, nextCursor: page.nextCursor };
   }
-  const [page, queueSummary] = await Promise.all([captureQueueStore.listPage({ limit, cursor: query.cursor, state }), captureQueue.summary()]);
+  const [page, queueSummary] = await Promise.all([captureQueueStore.listPage({ limit, cursor: query.cursor, state, excludeSaved }), captureQueue.summary()]);
   const counts = Object.fromEntries(captureQueueStatuses.map((state) => [state, queueSummary.counts[state]])) as CaptureQueueSummary["counts"];
-  return { items: page.jobs.map((job) => queueJobToRecord(job, true)), summary: { total: queueSummary.total, active: queueSummary.pending, counts }, nextCursor: page.nextCursor };
+  const visibleCounts = excludeSaved ? { ...counts, Saved: 0 } : counts;
+  return { items: page.jobs.map((job) => queueJobToRecord(job, true)), summary: { total: excludeSaved ? queueSummary.total - counts.Saved : queueSummary.total, active: queueSummary.pending, counts: visibleCounts }, nextCursor: page.nextCursor };
 });
 
 app.get("/api/capture-queue/:id", async (request, reply) => {

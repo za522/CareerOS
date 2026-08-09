@@ -105,12 +105,13 @@ export class PostgresCaptureRepository {
 
   async get(context: WorkspaceContext, id: string) { return this.scoped(context, async tx => { const row=(await tx.query("SELECT * FROM capture_queue_items WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL",[context.workspaceId,id])).rows[0]; return row?rowToJob(await this.refreshDuplicate(tx,row)):null; }); }
 
-  async listPage(context: WorkspaceContext, options: { limit:number; cursor?:string; state?:CaptureQueueStatus }): Promise<CapturePage> {
+  async listPage(context: WorkspaceContext, options: { limit:number; cursor?:string; state?:CaptureQueueStatus; excludeSaved?:boolean }): Promise<CapturePage> {
     return this.scoped(context, async tx => {
       let cursor: {createdAt:string;id:string}|null=null;
       if(options.cursor) try{cursor=JSON.parse(Buffer.from(options.cursor,"base64url").toString("utf8"));}catch{cursor=null;}
       const values:unknown[]=[context.workspaceId]; const clauses=["workspace_id=$1","deleted_at IS NULL"];
       if(options.state){values.push(options.state);clauses.push(`state=$${values.length}`);}
+      else if(options.excludeSaved)clauses.push("state<>'Saved'");
       if(cursor?.createdAt&&cursor.id){values.push(cursor.createdAt,cursor.id);clauses.push(`(created_at<$${values.length-1} OR (created_at=$${values.length-1} AND id<$${values.length}))`);}
       values.push(options.limit+1);
       const rows=(await tx.query(`SELECT id,workspace_id,source_type,source_url,apply_url,left(raw_text,500) AS raw_text,state,progress,progress_message,attempt_count,draft_json,error,started_at,completed_at,created_at,updated_at FROM capture_queue_items WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC,id DESC LIMIT $${values.length}`,values as never[])).rows;

@@ -1,4 +1,4 @@
-import { parseGreenhouseResponse, parseLeverResponse, type SourceRole } from "./discovery.js";
+import { parseAshbyResponse, parseGreenhouseResponse, parseLeverResponse, type SourceRole } from "./discovery.js";
 import { assertSafeDirectUrl, type HostedRoleObservation } from "./postgres-discovery-repository.js";
 import type { HostedSourceFetcher } from "./postgres-discovery-service.js";
 
@@ -7,15 +7,17 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 const approvedHosts = {
   greenhouse: "boards-api.greenhouse.io",
   lever: "api.lever.co",
+  ashby: "api.ashbyhq.com",
 } as const;
 
 function approvedSourceUrl(value: string, kind: string) {
   const url = assertSafeDirectUrl(value);
   if (url.protocol !== "https:") throw new Error("Discovery providers must use HTTPS.");
-  if (kind !== "greenhouse" && kind !== "lever") throw new Error(`The hosted ${kind} discovery adapter is not available.`);
+  if (kind !== "greenhouse" && kind !== "lever" && kind !== "ashby") throw new Error(`The hosted ${kind} discovery adapter is not available.`);
   if (url.hostname.toLowerCase() !== approvedHosts[kind]) throw new Error(`${kind} discovery must use its approved public API host.`);
   if (kind === "greenhouse" && !/^\/v1\/boards\/[^/]+\/jobs\/?$/.test(url.pathname)) throw new Error("Greenhouse discovery must use a public board jobs endpoint.");
   if (kind === "lever" && !/^\/v0\/postings\/[^/]+\/?$/.test(url.pathname)) throw new Error("Lever discovery must use a public postings endpoint.");
+  if (kind === "ashby" && !/^\/posting-api\/job-board\/[^/]+\/?$/.test(url.pathname)) throw new Error("Ashby discovery must use a public job-board endpoint.");
   return url;
 }
 
@@ -50,7 +52,7 @@ async function readJson(response: Response, maximumBytes: number) {
 
 function classifications(company: string, role: SourceRole) {
   const value = `${company} ${role.title} ${role.team ?? ""} ${role.description ?? ""}`.toLowerCase();
-  const roleIdentity = `${role.title} ${role.team ?? ""}`.toLowerCase();
+  const roleIdentity = `${role.title} ${role.team ?? ""} ${role.employmentType ?? ""}`.toLowerCase();
   const roleFamily = /quant|research scientist|researcher/.test(value) ? "Quantitative research"
     : /trader|trading|market maker/.test(value) ? "Trading"
       : /software|engineer|developer|technology|platform|data/.test(value) ? "Engineering"
@@ -62,7 +64,7 @@ function classifications(company: string, role: SourceRole) {
     : /market mak|proprietary trad|investment bank|capital markets|sales and trading/.test(value) ? "sell_side" as const : "unknown" as const;
   const programme = /spring week|insight week/.test(roleIdentity) ? "Spring week" : /off[- ]?cycle/.test(roleIdentity) ? "Off-cycle"
     : /placement|year in industry/.test(roleIdentity) ? "Placement" : /graduate|new grad|analyst programme/.test(roleIdentity) ? "Graduate"
-      : /intern|summer/.test(roleIdentity) ? "Internship" : /entry[- ]level|junior|early career/.test(roleIdentity) ? "Entry-level" : "";
+      : /intern|summer/.test(roleIdentity) ? "Internship" : /entry[- ]level|junior|early career/.test(roleIdentity) || /\brecent graduates?\b/.test(value) ? "Entry-level" : "";
   const workMode = /\bhybrid\b/.test(value) ? "Hybrid" : /\bremote\b|work from home/.test(value) ? "Remote"
     : /\bon[- ]?site\b|in[- ]office/.test(value) ? "On-site" : "Not stated";
   const sponsorship = /(?:no|not|without)\s+(?:visa\s+)?sponsor|unable to sponsor|must (?:already )?have (?:the )?right to work/.test(value) ? "No"
@@ -138,7 +140,8 @@ export function createHostedAtsFetcher(options: {
       }
       if (!response?.ok) throw new Error(`Discovery source returned HTTP ${response?.status ?? 0}.`);
       const payload = await readJson(response, maximumBytes);
-      const roles = claim.source.kind === "greenhouse" ? parseGreenhouseResponse(payload) : parseLeverResponse(payload);
+      const roles = claim.source.kind === "greenhouse" ? parseGreenhouseResponse(payload)
+        : claim.source.kind === "lever" ? parseLeverResponse(payload) : parseAshbyResponse(payload);
       return {
         observations: roles.map((role) => hostedRole(claim.source.companyName, role)),
         inventoryComplete: inventoryIsComplete(response, payload, roles.length),
