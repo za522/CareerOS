@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configuredDataProvider, postgresRouteConverted } from "./runtime-data-provider.js";
+import { configuredDataProvider, postgresRouteConverted, postgresRouteRequiresConversion } from "./runtime-data-provider.js";
 
 describe("runtime data provider contract", () => {
   it("defaults local development to SQLite", () => expect(configuredDataProvider({ NODE_ENV: "development" })).toBe("sqlite"));
@@ -35,5 +35,12 @@ describe("runtime data provider contract", () => {
     expect(postgresRouteConverted("/api/restore")).toBe(true);
     expect(postgresRouteConverted("/api/jobs/job-1/application-studio")).toBe(true);
     expect(postgresRouteConverted("/api/jobs/job-1/recheck")).toBe(false);
+  });
+
+  it("never blocks the hosted React shell or its static assets", () => {
+    expect(postgresRouteRequiresConversion("/")).toBe(false);
+    expect(postgresRouteRequiresConversion("/opportunities")).toBe(false);
+    expect(postgresRouteRequiresConversion("/assets/index.js")).toBe(false);
+    expect(postgresRouteRequiresConversion("/api/imports")).toBe(true);
   });
 });

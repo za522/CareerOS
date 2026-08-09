@@ -77,3 +77,7 @@ export const POSTGRES_CONVERTED_API_PATHS = [
 export function postgresRouteConverted(url: string) {
   return url === "/health" || url === "/api/meta" || url.startsWith("/api/system/health") || POSTGRES_CONVERTED_API_PATHS.some((pattern) => pattern.test(url));
 }
+
+export function postgresRouteRequiresConversion(url: string) {
+  return url.startsWith("/api/") && !postgresRouteConverted(url);
+}

@@ -85,7 +85,7 @@ import { decodeBackupKey, decryptBackup, EncryptedBackupScheduler } from "./encr
 import { ProcessMutationGate } from "./mutation-gate.js";
 import { stageRestoreObjects } from "./restore-coordination.js";
 import { HostedSessionService } from "./hosted-session.js";
-import { createRuntimeDataProvider, postgresRouteConverted } from "./runtime-data-provider.js";
+import { createRuntimeDataProvider, postgresRouteConverted, postgresRouteRequiresConversion } from "./runtime-data-provider.js";
 import { PostgresHostedAuthService } from "./postgres-hosted-auth.js";
 import { PostgresTrackerRepository, SqliteTrackerRepository } from "./tracker-repository.js";
 import { PostgresCaptureRepository, type ClaimedCapture, type CaptureCommitRequest as PostgresCaptureCommitRequest } from "./postgres-capture-repository.js";
@@ -2963,7 +2963,7 @@ app.addHook("preHandler", async (request, reply) => {
 });
 
 app.addHook("preHandler", async (request, reply) => {
-  if (runtimeDataProvider.name === "postgres" && !postgresRouteConverted(request.url)) {
+  if (runtimeDataProvider.name === "postgres" && postgresRouteRequiresConversion(request.url)) {
     return reply.code(501).send({ error: "This feature has not yet been converted to hosted PostgreSQL storage. No SQLite fallback was used." });
   }
   if (request.url === "/health" || request.url === "/api/auth/config" || request.url === "/api/auth/invitations/stage"
