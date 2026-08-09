@@ -264,7 +264,7 @@ export function CaptureInbox({ onReview, onBatchSaved }: { onReview: (item: Capt
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{queuedCopy}. {summary.counts.Failed + summary.counts.Blocked} need attention.</div>
     <section className="capture-command-band">
       <div className="capture-heading">
-        <div><p className="eyebrow">CAPTURE INBOX</p><h1>Keep pasting. CareerOS will catch up.</h1></div>
+        <div><h1>Capture</h1></div>
         <div className={`queue-health ${summary.active ? "active" : ""}`}><span /><strong>{queuedCopy}</strong><small>{summary.total} total</small></div>
       </div>
       <div className="capture-mode" role="tablist" aria-label="Capture type">

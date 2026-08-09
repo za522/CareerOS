@@ -5,7 +5,6 @@ import {
   ArrowUpRight,
   Bold,
   BriefcaseBusiness,
-  CalendarDays,
   Check,
   ChevronDown,
   CircleAlert,
@@ -14,6 +13,7 @@ import {
   Clock3,
   Coins,
   Copy,
+  DatabaseBackup,
   Download,
   Eye,
   FileText,
@@ -25,7 +25,7 @@ import {
   Link2,
   ListFilter,
   LoaderCircle,
-  Map as MapIcon,
+  LogOut,
   Minus,
   PencilLine,
   Plus,
@@ -53,6 +53,7 @@ import { DiscoverFeed } from "./DiscoverFeed";
 import { ShareWorkspace } from "./ShareWorkspace";
 import { WorkspaceComments } from "./WorkspaceComments";
 import { CollaborationPresence } from "./CollaborationPresence";
+import { signOut } from "./auth";
 
 type Page = "opportunities" | "capture" | "discover" | "profile" | "studio";
 type AppRoute = { page: Page; selectedId: string | null; studioJobId: string | null };
@@ -422,25 +423,20 @@ export function App() {
   const canEditWorkspace = workspaceSession?.workspace.role !== "viewer";
 
   if (page === "studio" && studioJobId) {
-    return <>
-      <ApplicationStudio readOnly={!canEditWorkspace} jobPostingId={studioJobId} remoteMutationTick={remoteMutationTick} registerNavigationGuard={(guard) => { navigationGuardRef.current = guard; }} onBack={() => { if (window.history.state?.fromPath) window.history.back(); else navigate({ page: "profile", selectedId: null, studioJobId: null }); }} onOpenProfile={() => navigate({ page: "profile", selectedId: null, studioJobId: null })} />
-      <CollaborationPresence session={workspaceSession} />
-      <SystemStatus />
-    </>;
+    return <ApplicationStudio session={workspaceSession} readOnly={!canEditWorkspace} jobPostingId={studioJobId} remoteMutationTick={remoteMutationTick} registerNavigationGuard={(guard) => { navigationGuardRef.current = guard; }} onBack={() => { if (window.history.state?.fromPath) window.history.back(); else navigate({ page: "profile", selectedId: null, studioJobId: null }); }} onOpenProfile={() => navigate({ page: "profile", selectedId: null, studioJobId: null })} />;
   }
 
   return (
     <div className={`app-shell ${canEditWorkspace ? "" : "viewer-mode"}`}>
-      <Sidebar canEdit={canEditWorkspace} page={page} onNavigate={(nextPage) => navigate({ page: nextPage, selectedId: null, studioJobId: null })} onExport={() => void downloadBundle()} />
+      <Sidebar session={workspaceSession} page={page} onNavigate={(nextPage) => navigate({ page: nextPage, selectedId: null, studioJobId: null })} onShare={() => setShareOpen(true)} onExport={() => void downloadBundle()} onRestore={() => restoreFileRef.current?.click()} />
       <main className="main-area">
         <header className="topbar">
           <div className="breadcrumb"><span>CareerOS</span><span className="crumb-divider">/</span><strong>{page === "profile" ? "Career Studio" : page === "capture" ? "Capture Inbox" : page === "discover" ? "Discover" : "Opportunities"}</strong></div>
           <div className="top-actions">
             {page === "opportunities" && <button className="icon-button" title="Refresh opportunities" onClick={() => void loadJobs()}><RefreshCw size={17} /></button>}
-            {canEditWorkspace && <button className="quiet-button" onClick={() => void downloadBundle()}><Download size={16} /> Export backup</button>}
-            {canEditWorkspace && <button className="quiet-button" onClick={() => restoreFileRef.current?.click()}><Upload size={16} /> Restore backup</button>}
             <input ref={restoreFileRef} className="visually-hidden" type="file" aria-label="Choose CareerOS backup to restore" accept="application/json,.json" onChange={(event) => void restoreBackup(event.target.files?.[0])} />
-            <button className="quiet-button" onClick={() => setShareOpen(true)}><Users size={16} /> Share</button>
+            <CollaborationPresence session={workspaceSession} compact />
+            <SystemStatus />
             {page === "opportunities" && canEditWorkspace && <button className="primary-button" onClick={() => { setReview(null); setImportOpen(true); }}><Plus size={17} /> Add opportunity</button>}
           </div>
         </header>
@@ -451,9 +447,7 @@ export function App() {
         {page === "opportunities" ? <>
         <section className="page-heading">
           <div>
-            <p className="eyebrow">PERSONAL PIPELINE</p>
             <h1>Opportunities</h1>
-            <p className="heading-copy">A considered place for every role worth your attention.</p>
           </div>
           <div className="heading-stats" aria-label="Opportunity summary">
             <div><strong>{counts.total}</strong><span>visible</span></div>
@@ -501,28 +495,37 @@ export function App() {
 
       {selectedJob && <DetailPanel readOnly={!canEditWorkspace} job={selectedJob} busy={busy} researchSalaryOnOpen={canEditWorkspace && salaryResearchId === selectedJob.id} onSalaryResearchStarted={() => setSalaryResearchId(null)} onTailorCv={() => navigate({ page: "studio", selectedId: null, studioJobId: selectedJob.id })} onClose={() => { navigate({ page: "opportunities", selectedId: null, studioJobId: null }); setSalaryResearchId(null); }} onCreateApplication={createApplication} onAddEvent={addEvent} onRefresh={() => { void client.getJob(selectedJob.id).then(setSelectedJob); void loadJobs(); }} />}
       {isImportOpen && <ImportPanel mode={importMode} setMode={(value) => { setImportMode(value); setImportError(""); }} url={importUrl} setUrl={setImportUrl} text={importText} setText={setImportText} review={review} setReview={setReview} busy={busy} importError={importError} requiresDuplicateDecision={Boolean(reviewCaptureId) || Boolean(review?.response.discoveryPostingId) || Boolean(review?.response.duplicates.length)} duplicateDecision={captureDuplicateDecision} setDuplicateDecision={setCaptureDuplicateDecision} onStart={startImport} onCommit={commitReview} onClose={() => { setImportOpen(false); setReview(null); setReviewCaptureId(null); setCaptureDuplicateDecision(null); setImportError(""); }} />}
-      <SystemStatus />
-      <CollaborationPresence session={workspaceSession} />
       {shareOpen && <ShareWorkspace onClose={() => setShareOpen(false)} />}
     </div>
   );
 }
 
-function Sidebar({ page, canEdit, onNavigate, onExport }: { page: Page; canEdit: boolean; onNavigate: (page: Page) => void; onExport: () => void }) {
+function Sidebar({ page, session, onNavigate, onShare, onExport, onRestore }: { page: Page; session: WorkspaceSessionRecord | null; onNavigate: (page: Page) => void; onShare: () => void; onExport: () => void; onRestore: () => void }) {
+  const canEdit = session?.workspace.role !== "viewer";
+  const isOwner = session?.workspace.role === "owner";
+  const member = session?.members.find((item) => item.id === session.user.memberId);
+  const displayName = member?.displayName || session?.user.email || "CareerOS user";
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return <aside className="sidebar">
-    <div className="brand-mark"><div className="brand-glyph">C</div><div><strong>CareerOS</strong><span>Personal operating system</span></div></div>
+    <div className="brand-mark"><div className="brand-glyph">C</div><div><strong>CareerOS</strong></div></div>
     <nav className="side-nav">
       <div className="nav-label">WORKSPACE</div>
       <button className={`nav-item ${page === "opportunities" ? "active" : ""}`} onClick={() => onNavigate("opportunities")}><BriefcaseBusiness size={17} /><span>Opportunities</span><span className="nav-count">01</span></button>
       {canEdit && <button className={`nav-item ${page === "capture" ? "active" : ""}`} onClick={() => onNavigate("capture")}><ClipboardCheck size={17} /><span>Capture inbox</span></button>}
       <button className={`nav-item ${page === "discover" ? "active" : ""}`} onClick={() => onNavigate("discover")}><Eye size={17} /><span>Discover</span></button>
-      <button className="nav-item muted"><FolderKanban size={17} /><span>Applications</span></button>
-      <button className="nav-item muted"><CalendarDays size={17} /><span>Tasks</span></button>
-      <div className="nav-label nav-spacer">DIRECTION</div>
-      <button className="nav-item muted"><MapIcon size={17} /><span>Career map</span><span className="soon-pill">soon</span></button>
       <button className={`nav-item ${page === "profile" ? "active" : ""}`} onClick={() => onNavigate("profile")}><UserRound size={17} /><span>Career studio</span></button>
     </nav>
-    <div className="sidebar-footer"><div className="local-status"><span className="status-dot" /> Local workspace</div>{canEdit && <button className="side-export" onClick={onExport}><Upload size={15} /> Backup data</button>}<div className="profile-mini"><div className="avatar">ZA</div><div><strong>Zain Ahmad</strong><span>Design Engineer</span></div></div></div>
+    <div className="sidebar-footer">
+      <details className="account-menu">
+        <summary><span className="avatar">{initials || "C"}</span><span><strong>{displayName}</strong><small>{session?.workspace.name ?? "Workspace"}</small></span><ChevronDown size={14} /></summary>
+        <div className="account-popover">
+          <button onClick={onShare}><Users size={15} /> Share workspace</button>
+          {isOwner && <button onClick={onExport}><Download size={15} /> Export backup</button>}
+          {isOwner && <button onClick={onRestore}><DatabaseBackup size={15} /> Restore backup</button>}
+          <button onClick={() => void signOut()}><LogOut size={15} /> Sign out</button>
+        </div>
+      </details>
+    </div>
   </aside>;
 }
 
@@ -623,9 +626,7 @@ function ProfileStudio({ onOpenStudio, readOnly }: { onOpenStudio: (jobPostingId
   return <section className="profile-workspace">
     <div className="page-heading career-studio-heading">
       <div>
-        <p className="eyebrow">DOCUMENT WORKSPACE</p>
         <h1>Career Studio</h1>
-        <p className="heading-copy">A tailored CV workspace for every role you care about.</p>
       </div>
       <div className="profile-actions">
         <button className="quiet-button" onClick={() => void loadWorkspace()} disabled={loading || saving}><RefreshCw size={16} /> Refresh</button>
@@ -637,7 +638,7 @@ function ProfileStudio({ onOpenStudio, readOnly }: { onOpenStudio: (jobPostingId
       <div className="career-studio-metrics" aria-label="Career Studio summary"><div><strong>{workspace.documents.length}</strong><span>source CVs</span></div><div><strong>{roleCount}</strong><span>roles tailored</span></div><div><strong>{versionCount}</strong><span>saved versions</span></div><div><strong>{tailoredRoles.filter((role) => role.draftUpdatedAt).length}</strong><span>active drafts</span></div></div>
 
       <section className="career-studio-section">
-        <div className="career-section-heading"><div><p className="eyebrow">ACTIVE WORK</p><h2>CVs by role</h2><p>Each row is a separate job-specific CV workspace. Draft changes save automatically.</p></div></div>
+        <div className="career-section-heading"><div><h2>CVs by role</h2></div></div>
         {tailoredRoles.length ? <div className="career-role-list">
           <div className="career-role-head"><span>Role</span><span>Application</span><span>CV state</span><span>Source</span><span>Updated</span><span /></div>
           {tailoredRoles.map((role) => <button className="career-role-row" key={role.jobPostingId} onClick={() => onOpenStudio(role.jobPostingId)}>
@@ -652,12 +653,12 @@ function ProfileStudio({ onOpenStudio, readOnly }: { onOpenStudio: (jobPostingId
       </section>
 
       <section className="career-studio-section">
-        <div className="career-section-heading"><div><p className="eyebrow">START AN ADAPTATION</p><h2>Opportunities without a CV</h2><p>Open a role, choose a source CV, and tailor it against the job requirements.</p></div></div>
+        <div className="career-section-heading"><div><h2>Opportunities without a CV</h2></div></div>
         {untouchedRoles.length ? <div className="career-opportunity-grid">{untouchedRoles.map((role) => <article className="career-opportunity-row" key={role.jobPostingId}><div><strong>{role.title}</strong><span>{role.companyName}{role.location ? ` · ${role.location}` : ""}</span></div>{!readOnly && <button className="quiet-button" disabled={!workspace.documents.length} onClick={() => onOpenStudio(role.jobPostingId)}><FilePenLine size={14} /> Create CV</button>}</article>)}</div> : <p className="career-all-started">Every saved opportunity already has a CV draft or version.</p>}
       </section>
 
       <section className="career-studio-section career-source-library">
-        <div className="career-section-heading"><div><p className="eyebrow">SOURCE LIBRARY</p><h2>Imported CVs</h2><p>These are factual starting documents. They are not presented as the final CV for every role.</p></div>{!readOnly && <button className="text-button" onClick={() => setDocumentImportOpen(true)}><Plus size={14} /> Add source</button>}</div>
+        <div className="career-section-heading"><div><h2>Imported CVs</h2></div>{!readOnly && <button className="text-button" onClick={() => setDocumentImportOpen(true)}><Plus size={14} /> Add source</button>}</div>
         {workspace.documents.length ? <div className="career-document-list">{workspace.documents.map((item) => <button className="career-document-row" onClick={() => setPreviewDocumentId(item.document.id)} key={item.document.id}><FileText size={18} /><div><strong>{item.document.title}</strong><span>{item.document.mimeType || "Imported document"}</span></div><span>{item.roleCount} {item.roleCount === 1 ? "role" : "roles"}</span><span>{item.versionCount} {item.versionCount === 1 ? "version" : "versions"}</span><small>{formatDate(item.latestUpdatedAt)}</small><span className="career-document-preview-action">Preview <ArrowUpRight size={13} /></span></button>)}</div> : <div className="career-studio-empty"><Upload size={22} /><div><strong>No source CVs yet</strong><p>{readOnly ? "An editor can import the first factual CV." : "CareerOS needs at least one factual CV before it can create role-specific versions."}</p></div>{!readOnly && <button className="primary-button" onClick={() => setDocumentImportOpen(true)}>Import CV</button>}</div>}
       </section>
 
@@ -1332,7 +1333,7 @@ function paginateCvSections(sections: CvDocumentSection[], measurements: CvMeasu
   return pages;
 }
 
-function ApplicationStudio({ jobPostingId, remoteMutationTick, readOnly, registerNavigationGuard, onBack, onOpenProfile }: { jobPostingId: string; remoteMutationTick: number; readOnly: boolean; registerNavigationGuard: (guard: (() => Promise<boolean>) | null) => void; onBack: () => void; onOpenProfile: () => void }) {
+function ApplicationStudio({ session, jobPostingId, remoteMutationTick, readOnly, registerNavigationGuard, onBack, onOpenProfile }: { session: WorkspaceSessionRecord | null; jobPostingId: string; remoteMutationTick: number; readOnly: boolean; registerNavigationGuard: (guard: (() => Promise<boolean>) | null) => void; onBack: () => void; onOpenProfile: () => void }) {
   const [workspace, setWorkspace] = useState<ApplicationStudioWorkspace | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [content, setContent] = useState<CvDocumentContent>({ name: "", headline: "", inlineFormatting: [], sections: [] });
@@ -2160,7 +2161,7 @@ function ApplicationStudio({ jobPostingId, remoteMutationTick, readOnly, registe
       <button className="icon-button" title="Back to opportunity" onClick={() => void leaveStudio()}><ArrowLeft size={18} /></button>
       <div className="studio-app-title"><strong>Application Studio</strong></div>
       {workspace.documents.length > 0 && <label className="studio-document-select"><span>Base CV</span><select value={selectedDocumentId} disabled={busy} onChange={(event) => { const selected = workspace.documents.find((item) => item.document.id === event.target.value); if (selected) void selectDocument(selected); }}>{workspace.documents.map((item) => <option key={item.document.id} value={item.document.id}>{item.document.title}{item.usable ? "" : " (re-import needed)"}</option>)}</select><ChevronDown size={13} /></label>}
-      <div className="studio-header-actions">{!readOnly && <><button className="quiet-button" onClick={runExportPreflight} disabled={!selectedDocument?.usable || !content.sections.length || saving}><Download size={15} /> Export PDF</button><button className="primary-button" onClick={() => void saveVersion()} disabled={!selectedDocument?.usable || !content.sections.length || saving || !checkpointName.trim()} title={!checkpointName.trim() ? "Name the checkpoint in Snapshot history first" : "Save immutable snapshot"}>{saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Save snapshot</button></>}</div>
+      <div className="studio-header-actions"><CollaborationPresence session={session} compact /><SystemStatus />{!readOnly && <><button className="quiet-button" onClick={runExportPreflight} disabled={!selectedDocument?.usable || !content.sections.length || saving}><Download size={15} /> Export PDF</button><button className="primary-button" onClick={() => void saveVersion()} disabled={!selectedDocument?.usable || !content.sections.length || saving || !checkpointName.trim()} title={!checkpointName.trim() ? "Name the checkpoint in Snapshot history first" : "Save immutable snapshot"}>{saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Save snapshot</button></>}</div>
     </header>
 
     {preflightIssues && <div className="overlay studio-preflight-overlay"><section className="studio-preflight" role="dialog" aria-modal="true" aria-labelledby="studio-preflight-title"><header><div><p className="eyebrow">PDF PREFLIGHT</p><h2 id="studio-preflight-title">{preflightIssues.some((issue) => issue.severity === "error") ? "Fix export problems" : "Ready to export"}</h2></div><button className="icon-button" aria-label="Close PDF preflight" onClick={() => setPreflightIssues(null)}><X size={17} /></button></header>{preflightIssues.length ? <div className="studio-preflight-list">{preflightIssues.map((issue) => <div className={`preflight-${issue.severity}`} key={issue.id}>{issue.severity === "error" ? <CircleAlert size={15} /> : <TriangleAlert size={15} />}<span>{issue.message}</span></div>)}</div> : <div className="studio-preflight-clear"><CircleCheck size={17} /><span>No overflow, blank pages, malformed links, or unsupported formatting detected.</span></div>}<label className="studio-submitted-choice"><input type="checkbox" checked={markExportSubmitted} disabled={!workspace?.job.applicationId} onChange={(event) => setMarkExportSubmitted(event.target.checked)} /><span>{workspace?.job.applicationId ? "Record this exact PDF as the CV submitted for this application" : "Create an application record before marking a PDF as submitted"}</span></label><footer><button className="quiet-button" onClick={() => setPreflightIssues(null)}>Back to editor</button><button className="primary-button" disabled={preflightIssues.some((issue) => issue.severity === "error") || saving} onClick={() => void exportAcceptedDraft()}>{saving ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />} Export verified PDF</button></footer></section></div>}

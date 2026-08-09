@@ -59,7 +59,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (error) return <div className="auth-screen"><div className="auth-panel"><LockKeyhole size={24} /><h1>CareerOS could not open</h1><p>{error}</p><button className="quiet-button" onClick={() => window.location.reload()}>Try again</button></div></div>;
   if (!config || access === "checking" && (!config.hosted || session)) return <div className="auth-screen"><LoaderCircle className="spin" size={24} /><span>Opening your workspace...</span></div>;
-  if (config.hosted && !session) return <div className="auth-screen"><div className="auth-panel"><div className="auth-mark">C</div><p className="eyebrow">PRIVATE WORKSPACE</p><h1>CareerOS</h1><p>Sign in with the invited Google account to continue.</p><button className="primary-button auth-google" onClick={() => void signInWithGoogle().catch((cause) => setError(cause instanceof Error ? cause.message : "Google sign-in failed."))}><Chrome size={17} /> Continue with Google</button></div></div>;
+  if (config.hosted && !session) return <div className="auth-screen"><div className="auth-panel"><div className="auth-mark">C</div><h1>CareerOS</h1><p>Sign in with an invited Google account.</p><button className="primary-button auth-google" onClick={() => void signInWithGoogle().catch((cause) => setError(cause instanceof Error ? cause.message : "Google sign-in failed."))}><Chrome size={17} /> Continue with Google</button></div></div>;
   if (access === "uninvited") return <div className="auth-screen"><div className="auth-panel"><LockKeyhole size={24} /><h1>Invitation required</h1><p>This Google account does not have access to the private CareerOS workspace.</p></div></div>;
   return children;
 }

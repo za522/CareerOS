@@ -50,6 +50,7 @@ async function readJson(response: Response, maximumBytes: number) {
 
 function classifications(company: string, role: SourceRole) {
   const value = `${company} ${role.title} ${role.team ?? ""} ${role.description ?? ""}`.toLowerCase();
+  const roleIdentity = `${role.title} ${role.team ?? ""}`.toLowerCase();
   const roleFamily = /quant|research scientist|researcher/.test(value) ? "Quantitative research"
     : /trader|trading|market maker/.test(value) ? "Trading"
       : /software|engineer|developer|technology|platform|data/.test(value) ? "Engineering"
@@ -59,9 +60,9 @@ function classifications(company: string, role: SourceRole) {
       : /investment bank|capital markets|sales and trading/.test(value) ? "Investment bank" : "Financial services";
   const side = /hedge fund|asset management|investment management|private equity|venture capital/.test(value) ? "buy_side" as const
     : /market mak|proprietary trad|investment bank|capital markets|sales and trading/.test(value) ? "sell_side" as const : "unknown" as const;
-  const programme = /spring week|insight week/.test(value) ? "Spring week" : /off[- ]?cycle/.test(value) ? "Off-cycle"
-    : /placement|year in industry/.test(value) ? "Placement" : /graduate|new grad|analyst programme/.test(value) ? "Graduate"
-      : /intern|summer/.test(value) ? "Internship" : /entry[- ]level|junior|early career/.test(value) ? "Entry-level" : "";
+  const programme = /spring week|insight week/.test(roleIdentity) ? "Spring week" : /off[- ]?cycle/.test(roleIdentity) ? "Off-cycle"
+    : /placement|year in industry/.test(roleIdentity) ? "Placement" : /graduate|new grad|analyst programme/.test(roleIdentity) ? "Graduate"
+      : /intern|summer/.test(roleIdentity) ? "Internship" : /entry[- ]level|junior|early career/.test(roleIdentity) ? "Entry-level" : "";
   const workMode = /\bhybrid\b/.test(value) ? "Hybrid" : /\bremote\b|work from home/.test(value) ? "Remote"
     : /\bon[- ]?site\b|in[- ]office/.test(value) ? "On-site" : "Not stated";
   const sponsorship = /(?:no|not|without)\s+(?:visa\s+)?sponsor|unable to sponsor|must (?:already )?have (?:the )?right to work/.test(value) ? "No"

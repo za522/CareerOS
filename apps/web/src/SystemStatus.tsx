@@ -133,9 +133,16 @@ export function SystemStatus() {
     setStatus(next);
     if (next.backend === "online") {
       try {
-        const [runs, serviceHealth] = await Promise.all([client.listAiRuns(6), client.getSystemHealth()]);
+        const [runs, serviceHealth, meta] = await Promise.all([client.listAiRuns(6), client.getSystemHealth(), client.getMeta()]);
         setAiRuns(runs);
         setServices(serviceHealth);
+        setStatus((current) => ({
+          ...current,
+          ai: meta.ai.configured ? "ready" : "missing",
+          provider: meta.ai.provider,
+          model: meta.ai.model,
+          keySource: meta.ai.configured ? "environment" : "none",
+        }));
       } catch {
         // Request diagnostics already capture the failure; keep the last known ledger rows.
       }
@@ -268,7 +275,7 @@ export function SystemStatus() {
     <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</span>
     {open && <aside ref={panelRef} id="careeros-system-status" tabIndex={-1} className="system-panel" role="dialog" aria-modal="true" aria-labelledby="careeros-system-status-title">
       <header className="system-panel-header">
-        <div><span className="detail-kicker">LOCAL SYSTEM</span><h2 id="careeros-system-status-title">Status and errors</h2></div>
+        <div><h2 id="careeros-system-status-title">System health</h2></div>
         <button className="icon-button" aria-label="Close system status" title="Close system status" onClick={closePanel}><X size={17} /></button>
       </header>
 

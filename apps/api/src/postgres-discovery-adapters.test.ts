@@ -40,6 +40,15 @@ describe("hosted public ATS adapters", () => {
     expect(result.observations[0]).toMatchObject({ externalId: "lever-1", programme: "Internship", roleFamily: "Engineering" });
   });
 
+  it("does not infer a senior programme from internship boilerplate", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ jobs: [{
+      id: 42, title: "Senior DevOps Engineer", absolute_url: "https://job-boards.greenhouse.io/example/jobs/42",
+      content: "We also run a summer internship programme.",
+    }] }), { status: 200, headers: { "content-type": "application/json" } }));
+    const result = await createHostedAtsFetcher({ fetch })(claim("greenhouse", "https://boards-api.greenhouse.io/v1/boards/example/jobs?content=true"));
+    expect(result.observations[0]?.programme).toBe("");
+  });
+
   it("marks provider-declared pagination and truncated totals as partial", async () => {
     const lever = await createHostedAtsFetcher({ fetch: async () => new Response(JSON.stringify([{
       id: "lever-1", text: "Trader", hostedUrl: "https://jobs.lever.co/example/lever-1", categories: {},

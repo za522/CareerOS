@@ -42,7 +42,7 @@ function colorFor(value: string) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function CollaborationPresence({ session }: { session: WorkspaceSessionRecord | null }) {
+export function CollaborationPresence({ session, compact = false }: { session: WorkspaceSessionRecord | null; compact?: boolean }) {
   const [people, setPeople] = useState<Presence[]>([]);
   const [cursors, setCursors] = useState<Record<string, Cursor>>({});
   const [path, setPath] = useState(() => window.location.pathname + window.location.hash);
@@ -129,8 +129,8 @@ export function CollaborationPresence({ session }: { session: WorkspaceSessionRe
 
   if (!me) return null;
   return <>
-    <div className={`collaboration-presence collaboration-${connection}`} aria-label={connection === "online" ? `${people.length + 1} people online` : "Live collaboration offline"}>
-      <span className="collaboration-state" title={connection === "online" ? "Live collaboration connected" : connection === "connecting" ? "Connecting live collaboration" : "Live collaboration is offline"}>{connection === "online" ? "Live" : connection === "connecting" ? "Connecting" : "Offline"}</span>
+    <div className={`collaboration-presence collaboration-${connection} ${compact ? "collaboration-compact" : ""}`} aria-label={connection === "online" ? `${people.length + 1} people online` : "Live collaboration offline"}>
+      {!compact && <span className="collaboration-state" title={connection === "online" ? "Live collaboration connected" : connection === "connecting" ? "Connecting live collaboration" : "Live collaboration is offline"}>{connection === "online" ? "Live" : connection === "connecting" ? "Connecting" : "Offline"}</span>}
       <span className="presence-avatar" style={{ background: me.color }} title={`${me.name} (you)`}>{me.name.slice(0, 2).toUpperCase()}</span>
       {people.slice(0, 3).map((person) => <span className="presence-avatar" style={{ background: person.color }} title={`${person.name} · ${person.path}${person.activeField ? ` · ${person.activeField}` : ""}`} key={person.userId}>{person.name.slice(0, 2).toUpperCase()}</span>)}
       {people.length > 3 && <small>+{people.length - 3}</small>}

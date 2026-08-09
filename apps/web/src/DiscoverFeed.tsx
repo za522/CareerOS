@@ -53,6 +53,7 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
   const [freshOnly, setFreshOnly] = useState(false);
   const [deadlineSoon, setDeadlineSoon] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
@@ -72,6 +73,26 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
   const workspaceRef = useRef<DiscoveryWorkspace | null>(null);
   const requestVersionRef = useRef(0);
   const deliveryLimitRef = useRef(25);
+
+  const openSettings = (panel: "source" | "rule" | "telegram") => {
+    setSettingsOpen(true);
+    setSourceOpen(panel === "source");
+    setRuleOpen(panel === "rule");
+    setTelegramOpen(panel === "telegram");
+    if (panel === "telegram") {
+      setBusy("telegram-status");
+      void client.getTelegramSettings()
+        .then(setTelegramStatus)
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "Telegram settings could not be loaded."))
+        .finally(() => setBusy(""));
+    }
+  };
+
+  const clearFilters = () => {
+    setSearch(""); setSideFilter("all"); setProgrammeFilter("all"); setSectorFilter("all"); setFirmTypeFilter("all");
+    setRoleFamilyFilter("all"); setCareerTrackFilter("all"); setWorkModeFilter("all"); setSponsorshipFilter("all");
+    setTrackedFilter("all"); setLocationFilter(""); setFreshOnly(false); setDeadlineSoon(false); setShowHidden(false);
+  };
 
   const commitWorkspace = (next: DiscoveryWorkspace) => {
     workspaceRef.current = next;
@@ -237,16 +258,6 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
     finally { setBusy(""); }
   };
 
-  const openTelegram = async () => {
-    const next = !telegramOpen;
-    setTelegramOpen(next); setError("");
-    if (!next) return;
-    setBusy("telegram-status");
-    try { setTelegramStatus(await client.getTelegramSettings()); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Telegram settings could not be loaded."); }
-    finally { setBusy(""); }
-  };
-
   const saveTelegram = async () => {
     setBusy("telegram-save"); setError("");
     try {
@@ -297,16 +308,17 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
     for (const item of workspace?.latestRuns ?? []) if (!runs.has(item.sourceId)) runs.set(item.sourceId, item);
     return runs;
   }, [workspace]);
-  return <div className="discover-feed">
+  return <div className={`discover-feed ${sourceOpen && settingsOpen ? "sources-open" : ""} ${ruleOpen && settingsOpen ? "rules-open" : ""} ${telegramOpen && settingsOpen ? "telegram-open" : ""}`}>
     <section className="discover-hero">
-      <div><p className="eyebrow">LIVE FINANCE WATCHLIST</p><h1>Discover</h1><p>Approved company sources, checked repeatedly. A failed check never closes a role.</p></div>
-      {!readOnly && <div className="discover-actions"><button className="quiet-button" aria-expanded={ruleOpen} onClick={() => setRuleOpen((value) => !value)}><Bell size={15} /> Alerts</button><button className="quiet-button" aria-expanded={telegramOpen} onClick={() => void openTelegram()}><Send size={15} /> Telegram</button><button className="quiet-button" aria-expanded={sourceOpen} onClick={() => setSourceOpen((value) => !value)}><Plus size={15} /> Source</button><button className="primary-button" disabled={Boolean(busy) || !workspace?.sources.length} onClick={() => void run()}>{busy === "all" ? <LoaderCircle className="spin" size={15} /> : <Radar size={15} />} Check now</button></div>}
+      <h1>Discover</h1>
+      {!readOnly && <div className="discover-actions"><button className="quiet-button" aria-expanded={settingsOpen} onClick={() => { setSettingsOpen((value) => !value); if (!settingsOpen && !sourceOpen && !ruleOpen && !telegramOpen) setSourceOpen(true); }}><Settings2 size={15} /> Settings</button><button className="primary-button" disabled={Boolean(busy) || !workspace?.sources.length} onClick={() => void run()}>{busy === "all" ? <LoaderCircle className="spin" size={15} /> : <Radar size={15} />} Check now</button></div>}
     </section>
 
     {error && <div className="capture-inline-error" role="alert"><TriangleAlert size={16} />{error}</div>}
     <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
 
-    {!readOnly && (sourceOpen || ruleOpen || telegramOpen) && <section className="discover-setup-band">
+    {!readOnly && settingsOpen && <nav className="discover-settings-nav" aria-label="Discovery settings"><button className={sourceOpen ? "active" : ""} onClick={() => openSettings("source")}><Building2 size={14} /> Sources</button><button className={ruleOpen ? "active" : ""} onClick={() => openSettings("rule")}><Bell size={14} /> Alerts</button><button className={telegramOpen ? "active" : ""} onClick={() => openSettings("telegram")}><Send size={14} /> Telegram</button></nav>}
+    {!readOnly && settingsOpen && (sourceOpen || ruleOpen || telegramOpen) && <section className="discover-setup-band">
       {sourceOpen && <div className="discover-setup-form"><header><Building2 size={16} /><strong>Add an approved public source</strong></header><div className="discover-form-grid">
         <label><span>Company</span><input value={source.companyName} onChange={(event) => setSource({ ...source, companyName: event.target.value, name: event.target.value ? `${event.target.value} careers` : "" })} /></label>
         <label><span>Provider</span><select value={source.kind} onChange={(event) => setSource({ ...source, kind: event.target.value as DiscoverySourceCreateInput["kind"] })}><option value="greenhouse">Greenhouse</option><option value="lever">Lever</option></select></label>
@@ -338,8 +350,17 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
       <div className="discover-last-check"><Clock3 size={14} /><span>Last checked {relative(workspace?.latestRuns[0]?.completedAt ?? null)}</span></div>
     </section>
 
-    <section className="discover-toolbar"><label><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search every discovered role..." /></label><span>{workspace?.postingTotal ?? 0} matches</span></section>
-    <section className="discover-filters" aria-label="Discovery filters">
+    <section className="discover-toolbar"><label><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search company, role or location" /></label><span>{workspace?.postingTotal ?? 0} matches</span></section>
+    <section className="discover-quick-filters" aria-label="Quick filters">
+      <button className={freshOnly ? "active" : ""} onClick={() => setFreshOnly((value) => !value)}>New 24h</button>
+      <button className={programmeFilter === "Graduate" ? "active" : ""} onClick={() => setProgrammeFilter(programmeFilter === "Graduate" ? "all" : "Graduate")}>Graduate</button>
+      <button className={programmeFilter === "Internship" ? "active" : ""} onClick={() => setProgrammeFilter(programmeFilter === "Internship" ? "all" : "Internship")}>Internship</button>
+      <button className={locationFilter === "London" ? "active" : ""} onClick={() => setLocationFilter(locationFilter === "London" ? "" : "London")}>London</button>
+      <button className={locationFilter === "Singapore" ? "active" : ""} onClick={() => setLocationFilter(locationFilter === "Singapore" ? "" : "Singapore")}>Singapore</button>
+      <button className={deadlineSoon ? "active" : ""} onClick={() => setDeadlineSoon((value) => !value)}>Deadline soon</button>
+      <button className="reset" onClick={clearFilters}>Reset</button>
+    </section>
+    <details className="discover-advanced"><summary><Settings2 size={14} /> More filters</summary><section className="discover-filters" aria-label="Discovery filters">
       <select aria-label="Buy or sell side" value={sideFilter} onChange={(event) => setSideFilter(event.target.value)}><option value="all">All sides</option><option value="buy_side">Buy side</option><option value="sell_side">Sell side</option><option value="unknown">Not classified</option></select>
       <select aria-label="Programme" value={programmeFilter} onChange={(event) => setProgrammeFilter(event.target.value)}><option value="all">All programmes</option><option>Graduate</option><option>Internship</option><option>Off-cycle</option><option>Spring week</option><option>Placement</option><option>Entry-level</option></select>
       <input aria-label="Location filter" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} placeholder="Any location" />
@@ -350,12 +371,10 @@ export function DiscoverFeed({ onReview, readOnly = false }: { onReview: (review
       <select aria-label="Work mode" value={workModeFilter} onChange={(event) => setWorkModeFilter(event.target.value)}><option value="all">Any work mode</option><option>Remote</option><option>Hybrid</option><option>On-site</option><option>Not stated</option></select>
       <select aria-label="Sponsorship evidence" value={sponsorshipFilter} onChange={(event) => setSponsorshipFilter(event.target.value)}><option value="all">Any sponsorship</option><option>Yes</option><option>No</option><option>Not stated</option></select>
       <select aria-label="Saved state" value={trackedFilter} onChange={(event) => setTrackedFilter(event.target.value)}><option value="all">Saved or unsaved</option><option value="saved">Saved</option><option value="unsaved">Not saved</option></select>
-      <label><input type="checkbox" checked={freshOnly} onChange={(event) => setFreshOnly(event.target.checked)} /> New in 24h</label>
-      <label><input type="checkbox" checked={deadlineSoon} onChange={(event) => setDeadlineSoon(event.target.checked)} /> Deadline soon</label>
       <label><input type="checkbox" checked={showHidden} onChange={(event) => setShowHidden(event.target.checked)} /> Show hidden</label>
-    </section>
+    </section></details>
 
-    {!workspace ? <div className="table-state" role="status"><LoaderCircle className="spin" size={20} /><span>Loading discovery feed...</span></div> : !workspace.sources.length ? <div className="discover-empty"><Radar size={24} /><strong>{readOnly ? "No discovery sources configured" : "Add your first approved careers source"}</strong><span>CareerOS supports the official public Greenhouse and Lever job-board APIs.</span>{!readOnly && <button className="primary-button" onClick={() => setSourceOpen(true)}><Plus size={15} /> Add source</button>}</div> : !postings.length ? <div className="discover-empty"><Search size={24} /><strong>No roles match these filters</strong><span>Clear a filter or include hidden roles to widen the feed.</span></div> : <div className="discover-table" role="table" aria-label="Live discovered roles">
+    {!workspace ? <div className="table-state" role="status"><LoaderCircle className="spin" size={20} /><span>Loading discovery feed...</span></div> : !workspace.sources.length ? <div className="discover-empty"><Radar size={24} /><strong>{readOnly ? "No discovery sources configured" : "Add your first careers source"}</strong>{!readOnly && <button className="primary-button" onClick={() => openSettings("source")}><Plus size={15} /> Add source</button>}</div> : !postings.length ? <div className="discover-empty"><Search size={24} /><strong>No roles match these filters</strong><span>Clear a filter or include hidden roles to widen the feed.</span></div> : <div className="discover-table" role="table" aria-label="Live discovered roles">
       <div className="discover-table-row discover-table-head" role="row"><span role="columnheader">Company</span><span role="columnheader">Role</span><span role="columnheader">Programme</span><span role="columnheader">Location</span><span role="columnheader">Deadline</span><span role="columnheader">Employer posted</span><span role="columnheader">CareerOS detected</span><span role="columnheader">Last checked</span><span role="columnheader">Availability</span><span role="columnheader" aria-label="Actions" /></div>
       {postings.map((posting) => <div className="discover-table-row" role="row" key={posting.id}>
         <div role="cell" data-label="Company"><strong>{posting.companyName}</strong><small>{posting.side === "unknown" ? "Side not classified" : posting.side.replace("_", " ")}</small></div>
