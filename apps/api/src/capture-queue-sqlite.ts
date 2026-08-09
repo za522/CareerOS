@@ -232,4 +232,10 @@ export class SqliteCaptureQueueStore implements CaptureQueueStore {
       WHERE state = 'Extracting' AND updated_at <= ? AND deleted_at IS NULL`).run(updatedAt, cutoffTimestamp);
     return result.changes;
   }
+
+  async dismiss(id: string): Promise<boolean> {
+    const result = this.sqlite.prepare(`UPDATE capture_queue_items SET deleted_at = ?, updated_at = ?, revision = revision + 1
+      WHERE id = ? AND state NOT IN ('Queued', 'Extracting') AND deleted_at IS NULL`).run(new Date().toISOString(), new Date().toISOString(), id);
+    return result.changes === 1;
+  }
 }

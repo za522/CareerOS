@@ -1068,6 +1068,7 @@ export type CareerOSClient = {
   getCapture: (id: string) => Promise<CaptureQueueItem>;
   retryCapture: (id: string) => Promise<CaptureQueueItem>;
   cancelCapture: (id: string) => Promise<CaptureQueueItem>;
+  deleteCapture: (id: string) => Promise<void>;
   listCaptureDrafts: () => Promise<CaptureDraftRecord[]>;
   saveCaptureDraft: (id: string, input: CaptureDraftSaveInput) => Promise<CaptureDraftRecord>;
   deleteCaptureDraft: (id: string, expectedRevision?: number) => Promise<void>;

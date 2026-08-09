@@ -100,6 +100,24 @@ describe("PostgreSQL capture crash and duplicate safety",()=>{
     expect(Number((await database.query<{count:number}>("SELECT count(*)::int AS count FROM field_evidence WHERE workspace_id=$1 AND entity_type='JobPosting' AND entity_id=$2",[workspaceId,String(saved!.id)])).rows[0]?.count)).toBe(2);
   },30000);
 
+  it("normalizes review date text before writing PostgreSQL date columns",async()=>{
+    const value=draft();
+    value.postingDate="Reposted 2 weeks ago";
+    value.applicationDeadline="12-Aug-2026";
+    const item=await reviewed(value);
+    const [saved]=await repository.commit(context,[{id:item.id}]);
+    const row=(await database.query<{posting_date:string|null;application_deadline:string|null}>("SELECT posting_date::text,application_deadline::text FROM job_postings WHERE id=$1",[String(saved!.id)])).rows[0];
+    expect(row).toEqual({posting_date:null,application_deadline:"2026-08-12"});
+  },30000);
+
+  it("dismisses a completed queue item without deleting its saved opportunity",async()=>{
+    const item=await reviewed();
+    const [saved]=await repository.commit(context,[{id:item.id}]);
+    expect(await repository.dismiss(context,item.id)).toBe(true);
+    expect(await repository.get(context,item.id)).toBeNull();
+    expect((await database.query("SELECT id FROM job_postings WHERE id=$1",[String(saved!.id)])).rows).toHaveLength(1);
+  },30000);
+
   it("unsticks a duplicate when its queued match has failed",async()=>{
     const original=await reviewed();
     const duplicate=await reviewed(draft(),"Duplicate",[{id:original.id,title:"Quant Trading Graduate",companyName:"Example Capital",sourceUrl:"",queued:true}]);

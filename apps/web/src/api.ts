@@ -137,6 +137,9 @@ export const client: CareerOSClient = {
   cancelCapture(id: string) {
     return request<CaptureQueueItem>(`/api/capture-queue/${id}/cancel`, { method: "POST" });
   },
+  async deleteCapture(id: string) {
+    await request<{ deleted: true }>(`/api/capture-queue/${id}`, { method: "DELETE" });
+  },
   listCaptureDrafts() {
     return request<CaptureDraftRecord[]>("/api/capture-drafts");
   },

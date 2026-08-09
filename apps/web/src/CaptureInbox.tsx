@@ -217,6 +217,15 @@ export function CaptureInbox({ onReview, onBatchSaved }: { onReview: (item: Capt
     }
   };
 
+  const dismiss = async (id: string) => {
+    try {
+      await client.deleteCapture(id);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "That capture could not be removed.");
+    }
+  };
+
   const loadMore = async () => {
     if (!nextCursor) return;
     try {
@@ -286,7 +295,7 @@ export function CaptureInbox({ onReview, onBatchSaved }: { onReview: (item: Capt
     </section>
 
     <section className="capture-queue-section">
-      <header><div><h2>Import queue</h2><p>Review extracted rows when they are ready. One failure never stops the rest.</p></div><div className="capture-header-actions">{visibleReadyCount > 0 && <button className="quiet-button" disabled={submitting} onClick={() => void approveValidBatch()}><Check size={15} /> Save {visibleReadyCount} valid</button>}<button className="icon-button" title="Refresh capture queue" onClick={() => void refresh()}><RefreshCw size={16} /></button></div></header>
+      <header><div><h2>Import queue</h2><p>Review extracted rows when they are ready. One failure never stops the rest.</p></div><div className="capture-header-actions">{visibleReadyCount > 0 && <button className="quiet-button" disabled={submitting} onClick={() => void approveValidBatch()}><Check size={15} /> Save {visibleReadyCount} ready</button>}<button className="icon-button" title="Refresh capture queue" onClick={() => void refresh()}><RefreshCw size={16} /></button></div></header>
       {!items.length ? <div className="capture-empty"><ClipboardPaste size={22} /><strong>No captures queued</strong><span>Your first pasted job will appear here immediately.</span></div> : <div className="capture-queue-list">
         {items.map((item) => <article className="capture-queue-row" key={item.id}>
           <div className={`capture-state state-${item.state.toLowerCase().replaceAll(" ", "-")}`}>{item.state === "Extracting" || item.state === "Queued" ? <LoaderCircle className="spin" size={15} /> : item.state === "Saved" ? <Check size={15} /> : item.state === "Failed" || item.state === "Blocked" ? <AlertTriangle size={15} /> : <Clock3 size={15} />}<span>{stateLabel(item)}</span></div>
@@ -295,6 +304,7 @@ export function CaptureInbox({ onReview, onBatchSaved }: { onReview: (item: Capt
             {(item.state === "Needs Review" || item.state === "Duplicate") && <button className="quiet-button" onClick={() => onReview(item)}>{item.state === "Duplicate" ? "Compare" : "Review"}</button>}
             {(item.state === "Failed" || item.state === "Blocked") && <button className="quiet-button" onClick={() => void retry(item.id)}><RotateCcw size={14} /> Retry</button>}
             {(item.state === "Queued" || item.state === "Extracting") && <button className="quiet-button" onClick={() => void cancel(item.id)}><X size={14} /> Cancel</button>}
+            {item.state !== "Queued" && item.state !== "Extracting" && <button className="icon-button" aria-label={`Remove ${item.draft?.title || "capture"} from queue`} title="Remove from queue" onClick={() => void dismiss(item.id)}><X size={14} /></button>}
           </div>
         </article>)}
       </div>}

@@ -777,7 +777,7 @@ test("queues 20 rapid captures plus a blocked URL without losing the composer", 
   await expect(page.getByText("21 total")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Retry" }).first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Retry" }).first().click();
-  const saveValid = page.getByRole("button", { name: /Save \d+ valid/ });
+  const saveValid = page.getByRole("button", { name: /Save \d+ ready/ });
   await expect(saveValid).toBeVisible({ timeout: 20_000 });
   await saveValid.click();
   await expect(page.locator(".capture-state", { hasText: "Saved" }).first()).toBeVisible({ timeout: 15_000 });
@@ -862,7 +862,7 @@ test("opens the exact late duplicate after an atomic batch save conflict", async
   await json(await request.post(`${api}/api/jobs`, { data: { title: duplicateTitle, companyName: "Late Browser Capital", location: "London" } }));
 
   await page.goto("/capture");
-  await page.getByRole("button", { name: /Save \d+ valid/ }).click();
+  await page.getByRole("button", { name: /Save \d+ ready/ }).click();
   await expect(page.getByRole("dialog", { name: "Review opportunity" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Role or internship name" })).toHaveValue(duplicateTitle);
   await expect(page.getByText("Choose what to do with this possible duplicate")).toBeVisible();

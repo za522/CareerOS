@@ -3213,6 +3213,15 @@ app.post("/api/capture-queue/:id/cancel", async (request, reply) => {
   }
 });
 
+app.delete("/api/capture-queue/:id", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const deleted = postgresCaptureRepository
+    ? await postgresCaptureRepository.dismiss(trackerContext(request), id)
+    : await captureQueueStore.dismiss(id);
+  if (!deleted) return reply.code(409).send({ error: "Finish or cancel this capture before removing it." });
+  return { deleted: true };
+});
+
 type CaptureDraftRow = { id: string; sourceType: "url" | "pasted_text"; value: string; error: string | null; createdAt: string; updatedAt: string; revision: number };
 
 function captureDraftRecord(row: CaptureDraftRow): CaptureDraftRecord {

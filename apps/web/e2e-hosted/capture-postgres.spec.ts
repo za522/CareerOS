@@ -124,7 +124,7 @@ test("hosted PostgreSQL capture queue remains usable, reviewable, durable, and c
   });
   expect(seed.ok(), await seed.text()).toBeTruthy();
 
-  await page.getByRole("button", { name: /Save 3 valid/ }).click();
+  await page.getByRole("button", { name: /Save 3 ready/ }).click();
   await expect(page.getByRole("heading", { name: "Review opportunity" })).toBeVisible();
   await expect(page.getByLabel("Role or internship name")).toHaveValue(conflictTitle);
   await page.getByLabel("Create another opportunity").check();
@@ -134,7 +134,7 @@ test("hosted PostgreSQL capture queue remains usable, reviewable, durable, and c
   await expect.poll(async () => (await queue(request)).summary.counts["Needs Review"], { timeout: 30_000 }).toBe(2);
   await page.getByRole("button", { name: "Capture inbox" }).click();
   await expect(page.getByRole("heading", { name: "Keep pasting. CareerOS will catch up." })).toBeVisible();
-  await page.getByRole("button", { name: /Save 2 valid/ }).click();
+  await page.getByRole("button", { name: /Save 2 ready/ }).click();
   await expect.poll(async () => (await queue(request)).summary.counts.Saved, { timeout: 30_000 }).toBe(3);
 
   await page.getByRole("button", { name: /^Opportunities/ }).click();

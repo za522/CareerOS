@@ -59,6 +59,18 @@ describe("SqliteCaptureQueueStore", () => {
     expect(await store.list()).toHaveLength(1);
   });
 
+  it("dismisses completed captures but not active work", async () => {
+    const { store } = createStore();
+    const timestamp = "2026-08-08T12:00:00.000Z";
+    const completed: CaptureQueueJob = { id: "review", input: { kind: "text", text: "Review" }, status: "Needs Review", attempts: 1, progress: 1, progressMessage: null, result: null, error: null, createdAt: timestamp, updatedAt: timestamp, startedAt: timestamp, finishedAt: timestamp };
+    const active: CaptureQueueJob = { ...completed, id: "active", status: "Extracting", progress: 0.5, finishedAt: null };
+    await store.createMany([completed, active]);
+    await expect(store.dismiss("review")).resolves.toBe(true);
+    await expect(store.dismiss("active")).resolves.toBe(false);
+    expect(await store.get("review")).toBeNull();
+    expect(await store.get("active")).not.toBeNull();
+  });
+
   it("rolls back the queue and handoff mutation together when either side fails", async () => {
     const { sqlite, store } = createStore();
     sqlite.exec("CREATE TABLE capture_drafts (id TEXT PRIMARY KEY, deleted_at TEXT)");
