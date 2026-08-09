@@ -141,6 +141,18 @@ if (!Number.isSafeInteger(configuredRateLimit) || configuredRateLimit < 1) {
 await app.register(rateLimit, { max: configuredRateLimit, timeWindow: "1 minute" });
 
 const now = () => new Date().toISOString();
+
+function postgresDateOrNull(value: string | null | undefined) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value?.trim() ?? "");
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+    ? `${match[1]}-${match[2]}-${match[3]}`
+    : null;
+}
 const keychainService = "CareerOS.OpenAI";
 const keychainAccount = userInfo().username;
 const projectDir = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -3914,15 +3926,15 @@ async function persistHostedSalaryEstimate(
       parsed.baseMinAmount ?? null, parsed.baseMaxAmount ?? null, parsed.totalCompMinAmount ?? null, parsed.totalCompMaxAmount ?? null,
       parsed.currency, parsed.paymentPeriod, parsed.baseSalary ?? null, parsed.bonus ?? null, parsed.equity, parsed.otherCompensation,
       parsed.country, parsed.region, parsed.seniorityAssumptions, parsed.sourceName, parsed.sourceUrl, parsed.evidenceExcerpt,
-      parsed.sourceDate || null, parsed.confidence, parsed.annualisedEquivalent ?? null, parsed.normalisedCurrency,
-      parsed.exchangeRateDate || null, parsed.researchNotes, timestamp,
+      postgresDateOrNull(parsed.sourceDate), parsed.confidence, parsed.annualisedEquivalent ?? null, parsed.normalisedCurrency,
+      postgresDateOrNull(parsed.exchangeRateDate), parsed.researchNotes, timestamp,
     ]);
     for (const item of evidence) {
       await tx.query(`INSERT INTO salary_research_evidence(
         id,workspace_id,salary_estimate_id,source_name,source_url,source_date,role_title,location,seniority,
         compensation_scope,min_amount,max_amount,currency,payment_period,excerpt,confidence,created_at
       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, [
-        randomUUID(), context.workspaceId, id, item.sourceName, item.sourceUrl, item.sourceDate || null, item.roleTitle,
+        randomUUID(), context.workspaceId, id, item.sourceName, item.sourceUrl, postgresDateOrNull(item.sourceDate), item.roleTitle,
         item.location, item.seniority, item.compensationScope, item.minAmount ?? null, item.maxAmount ?? null,
         item.currency, item.paymentPeriod, item.excerpt, item.confidence, timestamp,
       ]);

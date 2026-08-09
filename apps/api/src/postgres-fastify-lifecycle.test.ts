@@ -221,7 +221,7 @@ describe("PostgreSQL Fastify lifecycle", () => {
       evidence: [{
         sourceName: "Public salary survey",
         sourceUrl: "https://example.com/salary",
-        sourceDate: "2026-08-09",
+        sourceDate: "Reposted 2 weeks ago",
         roleTitle: "Graduate Software Engineer",
         location: "London",
         seniority: "Graduate",
@@ -255,7 +255,7 @@ describe("PostgreSQL Fastify lifecycle", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().salaries).toEqual(expect.arrayContaining([
       expect.objectContaining({ estimateType: "researched", minAmount: 55_000 }),
-      expect.objectContaining({ estimateType: "ai_assisted", baseMinAmount: 60_000, evidence: [expect.objectContaining({ sourceName: "Public salary survey" })] }),
+      expect.objectContaining({ estimateType: "ai_assisted", baseMinAmount: 60_000, evidence: [expect.objectContaining({ sourceName: "Public salary survey", sourceDate: null })] }),
     ]));
   });
 
